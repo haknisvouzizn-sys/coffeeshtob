@@ -1,0 +1,178 @@
+backend:
+  name: git-gateway
+  branch: main
+
+# Local backend for offline or local dev testing
+local_backend: true
+
+# Media / Uploads configuration
+media_folder: "public/images"
+public_folder: "/images"
+
+# Localization & Display
+locale: "ru"
+display_url: "/"
+logo_url: "/images/coffee_cup_porcelain_1787950388595.jpg"
+
+collections:
+  - name: "content_management"
+    label: "Управление контентом сайта"
+    delete: false
+    editor:
+      preview: false
+    files:
+      - file: "public/content.json"
+        name: "site_content"
+        label: "Все разделы сайта «Кофештаб»"
+        fields:
+          # 1. ШАПКА И НАВИГАЦИЯ
+          - name: "header"
+            label: "Шапка и навигация"
+            widget: "object"
+            fields:
+              - { label: "Название кофейни", name: "brandName", widget: "string" }
+              - { label: "Подзаголовок бренда", name: "brandSubtitle", widget: "string" }
+              - { label: "Текст кнопки соцсетей", name: "socialsButtonText", widget: "string" }
+              - { label: "Заголовок окна соцсетей", name: "socialsModalTitle", widget: "string" }
+              - name: "socials"
+                label: "Список соцсетей в окне"
+                widget: "list"
+                fields:
+                  - { label: "Идентификатор", name: "id", widget: "string" }
+                  - { label: "Название", name: "title", widget: "string" }
+                  - { label: "Ссылка (URL)", name: "url", widget: "string" }
+              - name: "navItems"
+                label: "Пункты главного меню"
+                widget: "list"
+                fields:
+                  - { label: "ID секции (якорь)", name: "id", widget: "string" }
+                  - { label: "Название пункта меню", name: "label", widget: "string" }
+
+          # 2. ГЛАВНЫЙ ЭКРАН (HERO)
+          - name: "hero"
+            label: "Главный экран (Hero)"
+            widget: "object"
+            fields:
+              - { label: "Фоновое изображение", name: "bgImage", widget: "image" }
+              - { label: "Плашка с адресом", name: "locationBadge", widget: "string" }
+              - { label: "Главный заголовок", name: "title", widget: "string" }
+              - { label: "Основной текст", name: "description", widget: "text" }
+              - { label: "Текст первой кнопки (Меню)", name: "primaryButtonText", widget: "string" }
+              - { label: "Текст второй кнопки (О нас)", name: "secondaryButtonText", widget: "string" }
+
+          # 3. О ШТАБЕ
+          - name: "about"
+            label: "О штабе"
+            widget: "object"
+            fields:
+              - { label: "Метка раздела", name: "sectionTag", widget: "string" }
+              - { label: "Заголовок раздела", name: "title", widget: "string" }
+              - { label: "Главная фотография дома", name: "image", widget: "image" }
+              - { label: "Город (плашка на фото)", name: "badgeCity", widget: "string" }
+              - { label: "Улица и дом (плашка на фото)", name: "badgeStreet", widget: "string" }
+              - { label: "Подпись на фото", name: "badgeSub", widget: "string" }
+              - name: "paragraphs"
+                label: "Абзацы текста истории штаба"
+                widget: "list"
+                field: { label: "Абзац", name: "paragraph", widget: "text" }
+              - name: "features"
+                label: "Карточки преимуществ"
+                widget: "list"
+                fields:
+                  - { label: "ID", name: "id", widget: "string" }
+                  - { label: "Иконка (Sprout, Sparkles, Users, BookOpen)", name: "icon", widget: "string" }
+                  - { label: "Заголовок", name: "title", widget: "string" }
+                  - { label: "Описание", name: "description", widget: "text" }
+
+          # 4. МЕНЮ И НАПИТКИ
+          - name: "menu"
+            label: "Меню кофейни"
+            widget: "object"
+            fields:
+              - { label: "Метка раздела", name: "sectionTag", widget: "string" }
+              - { label: "Заголовок раздела", name: "title", widget: "string" }
+              - { label: "Подзаголовок раздела", name: "subtitle", widget: "string" }
+              - { label: "Текст бейджа о фарфоре", name: "porcelainBadge", widget: "string" }
+              - name: "highlightCards"
+                label: "Главные позиции меню (с фото)"
+                widget: "list"
+                fields:
+                  - { label: "ID", name: "id", widget: "string" }
+                  - { label: "Название позиции", name: "title", widget: "string" }
+                  - { label: "Описание", name: "description", widget: "text" }
+                  - { label: "Фотография", name: "image", widget: "image" }
+              - { label: "Метка блока других напитков", name: "additionalDrinksTag", widget: "string" }
+              - { label: "Заголовок блока других напитков", name: "additionalDrinksTitle", widget: "string" }
+              - name: "additionalDrinks"
+                label: "Список дополнительных напитков и выпечки"
+                widget: "list"
+                fields:
+                  - { label: "Название", name: "title", widget: "string" }
+                  - { label: "Описание", name: "desc", widget: "string" }
+
+          # 5. ЖИЗНЬ ШТАБА (КВАРТИРНИКИ И 3D)
+          - name: "eventsAndCraft"
+            label: "Жизнь штаба (Квартирники и 3D-печать)"
+            widget: "object"
+            fields:
+              - { label: "Метка раздела", name: "sectionTag", widget: "string" }
+              - { label: "Заголовок раздела", name: "title", widget: "string" }
+              - { label: "Подзаголовок раздела", name: "subtitle", widget: "string" }
+              - name: "cards"
+                label: "Карточки событий и мастерской"
+                widget: "list"
+                fields:
+                  - { label: "ID", name: "id", widget: "string" }
+                  - { label: "Заголовок", name: "title", widget: "string" }
+                  - { label: "Описание", name: "description", widget: "text" }
+                  - { label: "Дополнительное примечание", name: "note", widget: "text" }
+                  - { label: "Фотография", name: "image", widget: "image" }
+                  - { label: "Иконка (Music, Printer)", name: "icon", widget: "string" }
+
+          # 6. ГРАФИК РАБОТЫ И ГОСТЯМ ГОРОДА
+          - name: "hoursAndTourists"
+            label: "График работы и Гостям города"
+            widget: "object"
+            fields:
+              - { label: "Метка раздела", name: "sectionTag", widget: "string" }
+              - { label: "Заголовок раздела", name: "title", widget: "string" }
+              - { label: "Подзаголовок раздела", name: "subtitle", widget: "string" }
+              - name: "hoursCard"
+                label: "Карточка графика работы"
+                widget: "object"
+                fields:
+                  - { label: "Заголовок", name: "title", widget: "string" }
+                  - { label: "Основное расписание", name: "mainSchedule", widget: "string" }
+                  - { label: "Примечание дежурных", name: "note", widget: "text" }
+              - name: "touristsCard"
+                label: "Карточка гостям города"
+                widget: "object"
+                fields:
+                  - { label: "Заголовок", name: "title", widget: "string" }
+                  - { label: "Описание", name: "description", widget: "text" }
+                  - { label: "Текст кнопки гида", name: "buttonText", widget: "string" }
+                  - { label: "Ссылка на гид", name: "buttonUrl", widget: "string" }
+              - name: "crossingBanner"
+                label: "Баннер переправы через Волгу"
+                widget: "object"
+                fields:
+                  - { label: "Заголовок", name: "title", widget: "string" }
+                  - { label: "Описание переправы", name: "description", widget: "text" }
+
+          # 7. ПОДВАЛ (ФУТЕР) И КОНТАКТЫ
+          - name: "footer"
+            label: "Подвал сайта и контакты"
+            widget: "object"
+            fields:
+              - { label: "Название бренда", name: "brandName", widget: "string" }
+              - { label: "Подзаголовок бренда", name: "brandSubtitle", widget: "string" }
+              - { label: "Краткое описание", name: "description", widget: "text" }
+              - { label: "Заголовок адреса", name: "addressTitle", widget: "string" }
+              - { label: "Адрес", name: "address", widget: "string" }
+              - { label: "Ориентир", name: "landmark", widget: "string" }
+              - { label: "Заголовок навигации", name: "navTitle", widget: "string" }
+              - { label: "Заголовок блока соцсетей", name: "socialsTitle", widget: "string" }
+              - { label: "Ссылка на Telegram", name: "telegramUrl", widget: "string" }
+              - { label: "Ссылка на ВКонтакте", name: "vkUrl", widget: "string" }
+              - { label: "Ссылка на гид по городу", name: "guideUrl", widget: "string" }
+              - { label: "Копирайт", name: "copyright", widget: "string" }
