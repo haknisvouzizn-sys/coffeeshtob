@@ -43,11 +43,6 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  const handleOpenAdmin = () => {
-    setIsAdminOpen(true);
-    window.location.hash = 'admin';
-  };
-
   const handleCloseAdmin = () => {
     setIsAdminOpen(false);
     if (window.location.hash === '#admin' || window.location.hash === '#/admin') {
@@ -56,17 +51,17 @@ export const App: React.FC = () => {
   };
 
   const handleExploreMenu = () => {
-    smoothScrollTo('menu', 500, -80);
+    smoothScrollTo('menu', 200, -75);
   };
 
   const handleExploreAbout = () => {
-    smoothScrollTo('about', 500, -80);
+    smoothScrollTo('about', 200, -75);
   };
 
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2C1F16] flex flex-col font-sans selection:bg-[#BC6C3F]/20 selection:text-[#382015]">
-      {/* Dynamic Header with clean socials modal */}
-      <Header content={content.header} onOpenAdmin={handleOpenAdmin} />
+      {/* Header */}
+      <Header content={content.header} />
 
       <main className="flex-1">
         {/* Hero Section */}
@@ -89,14 +84,13 @@ export const App: React.FC = () => {
         <HoursAndTouristsSection content={content.hoursAndTourists} />
       </main>
 
-      {/* Footer with Contacts & Admin access */}
+      {/* Footer */}
       <Footer 
         content={content.footer} 
         navItems={content.header.navItems} 
-        onOpenAdmin={handleOpenAdmin}
       />
 
-      {/* Autonomous In-App Admin Panel (Zero External Services Needed) */}
+      {/* Minimalist Admin Panel */}
       <AdminPanel
         isOpen={isAdminOpen}
         onClose={handleCloseAdmin}

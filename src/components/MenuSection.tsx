@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { Sparkles } from 'lucide-react';
 import { MenuContent } from '../types';
 
@@ -8,7 +9,14 @@ interface MenuSectionProps {
 
 export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
   return (
-    <section id="menu" className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5]">
+    <motion.section 
+      id="menu" 
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
+      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5]"
+    >
       <div className="max-w-6xl mx-auto">
         
         {/* Section Header */}
@@ -26,10 +34,14 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
 
         {/* 4 Cards Grid with Smooth Hover Interactions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10 sm:mb-12">
-          {content.highlightCards.map((card) => (
-            <div
+          {content.highlightCards.map((card, idx) => (
+            <motion.div
               key={card.id}
-              className="flex flex-col rounded-3xl overflow-hidden bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-500 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group cursor-default"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-40px" }}
+              transition={{ duration: 0.4, delay: idx * 0.08, ease: [0.25, 1, 0.5, 1] }}
+              className="flex flex-col rounded-3xl overflow-hidden bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group cursor-default"
             >
               {/* Photo Area */}
               <div className="p-3 pb-0">
@@ -37,7 +49,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
                   <img
                     src={card.image}
                     alt={card.title}
-                    className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out"
+                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                     referrerPolicy="no-referrer"
                   />
                 </div>
@@ -45,7 +57,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
 
               {/* Text Info */}
               <div className="p-5 sm:p-6 flex flex-col flex-1 justify-start">
-                <h3 className="font-serif font-bold text-xl sm:text-2xl text-[#2C180F] mb-2 leading-snug group-hover:text-[#BC6C3F] transition-colors duration-300">
+                <h3 className="font-serif font-bold text-xl sm:text-2xl text-[#2C180F] mb-2 leading-snug group-hover:text-[#BC6C3F] transition-colors duration-200">
                   {card.title}
                 </h3>
                 
@@ -53,12 +65,18 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
                   {card.description}
                 </p>
               </div>
-            </div>
+            </motion.div>
           ))}
         </div>
 
         {/* Additional Drinks & Porcelain Serving Banner */}
-        <div className="rounded-3xl p-6 sm:p-8 lg:p-10 bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-500 ease-out hover:shadow-md">
+        <motion.div 
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, margin: "-40px" }}
+          transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
+          className="rounded-3xl p-6 sm:p-8 lg:p-10 bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-300 ease-out hover:shadow-md"
+        >
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 mb-6 border-b border-[#E0D0C0]">
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-[#BC6C3F] block mb-1">
@@ -80,9 +98,9 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
             {content.additionalDrinks.map((drink, idx) => (
               <div 
                 key={idx} 
-                className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2]/80 border border-[#E5D7C9] transition-all duration-400 ease-out hover:-translate-y-1 hover:shadow-md hover:bg-[#FAF7F2] hover:border-[#D4BFA9] group"
+                className="p-4 sm:p-5 rounded-2xl bg-[#FAF7F2]/80 border border-[#E5D7C9] transition-all duration-300 ease-out hover:-translate-y-1 hover:shadow-md hover:bg-[#FAF7F2] hover:border-[#D4BFA9] group"
               >
-                <h4 className="font-bold text-sm sm:text-base text-[#2C180F] mb-1 group-hover:text-[#BC6C3F] transition-colors duration-300">
+                <h4 className="font-bold text-sm sm:text-base text-[#2C180F] mb-1 group-hover:text-[#BC6C3F] transition-colors duration-200">
                   {drink.title}
                 </h4>
                 <p className="text-xs text-[#664E3F] leading-relaxed">
@@ -91,9 +109,9 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
               </div>
             ))}
           </div>
-        </div>
+        </motion.div>
 
       </div>
-    </section>
+    </motion.section>
   );
 };

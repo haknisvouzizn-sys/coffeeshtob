@@ -1,14 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Coffee, Menu, X, Send, Globe, Compass, ExternalLink, Lock } from 'lucide-react';
+import { Coffee, Menu, X, Send, Globe, Compass, ExternalLink } from 'lucide-react';
 import { smoothScrollTo } from '../utils/scroll';
 import { HeaderContent } from '../types';
 
 interface HeaderProps {
   content: HeaderContent;
-  onOpenAdmin?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
+export const Header: React.FC<HeaderProps> = ({ content }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [socialsOpen, setSocialsOpen] = useState(false);
@@ -41,7 +40,7 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
     e.preventDefault();
     setMobileMenuOpen(false);
     setSocialsOpen(false);
-    smoothScrollTo(id, 500, -80);
+    smoothScrollTo(id, 200, -75);
   };
 
   const getSocialIcon = (id: string) => {
@@ -51,9 +50,9 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
   };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center px-4 pt-3 sm:pt-5 pointer-events-none transition-all duration-300">
+    <header className="fixed top-0 left-0 right-0 z-50 flex justify-center px-4 pt-3 sm:pt-5 pointer-events-none transition-all duration-200">
       <div 
-        className={`pointer-events-auto w-full max-w-6xl rounded-full px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between transition-all duration-300 relative ${
+        className={`pointer-events-auto w-full max-w-6xl rounded-full px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between transition-all duration-200 relative ${
           isScrolled
             ? 'bg-[#FAF7F2]/95 backdrop-blur-md border border-[#E5D7C9] shadow-md text-[#2C180F]'
             : 'bg-[#FAF7F2]/90 backdrop-blur-sm border border-[#EAE0D5] shadow-sm text-[#2C180F]'
@@ -111,10 +110,10 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
             <span>{content.socialsButtonText}</span>
           </button>
 
-          {/* Socials Popover Window - Clean, compact & elegant */}
+          {/* Socials Popover Window */}
           {socialsOpen && (
             <div 
-              className="absolute right-0 top-12 sm:top-14 w-[260px] sm:w-[280px] bg-[#FAF7F2] border border-[#E5D7C9] rounded-2xl p-3 sm:p-3.5 shadow-2xl z-50 text-[#2C180F] animate-in fade-in zoom-in-95 duration-200"
+              className="absolute right-0 top-12 sm:top-14 w-[260px] sm:w-[280px] bg-[#FAF7F2] border border-[#E5D7C9] rounded-2xl p-3 sm:p-3.5 shadow-2xl z-50 text-[#2C180F] animate-in fade-in zoom-in-95 duration-150"
               id="socials-popover-menu"
             >
               <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-[#EAE0D5]">
@@ -139,10 +138,10 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="px-3 py-2.5 rounded-xl bg-[#F2EAE0] hover:bg-[#EAE0D5] border border-[#E5D7C9] transition-all duration-200 flex items-center justify-between group"
+                      className="px-3 py-2.5 rounded-xl bg-[#F2EAE0] hover:bg-[#EAE0D5] border border-[#E5D7C9] transition-all duration-150 flex items-center justify-between group"
                     >
                       <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-lg bg-[#E5D7C9] group-hover:bg-[#BC6C3F] text-[#BC6C3F] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-200">
+                        <div className="w-7 h-7 rounded-lg bg-[#E5D7C9] group-hover:bg-[#BC6C3F] text-[#BC6C3F] group-hover:text-white flex items-center justify-center shrink-0 transition-colors duration-150">
                           <Icon className="w-3.5 h-3.5" />
                         </div>
                         <span className="font-medium text-xs sm:text-sm text-[#2C180F] group-hover:text-[#BC6C3F] transition-colors">
@@ -154,22 +153,6 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
                   );
                 })}
               </div>
-
-              {onOpenAdmin && (
-                <div className="mt-2.5 pt-2 border-t border-[#EAE0D5]">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSocialsOpen(false);
-                      onOpenAdmin();
-                    }}
-                    className="w-full px-3 py-1.5 rounded-lg text-xs text-[#735A4B] hover:text-[#BC6C3F] hover:bg-[#EAE0D5] transition-colors flex items-center justify-center gap-1.5"
-                  >
-                    <Lock className="w-3 h-3" />
-                    <span>Панель управления (Админка)</span>
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
@@ -190,7 +173,7 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
 
       {/* Mobile Dropdown Menu */}
       {mobileMenuOpen && (
-        <div className="pointer-events-auto absolute top-16 sm:top-20 left-4 right-4 bg-[#FAF7F2] border border-[#E5D7C9] rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col gap-1.5 lg:hidden animate-in fade-in duration-200">
+        <div className="pointer-events-auto absolute top-16 sm:top-20 left-4 right-4 bg-[#FAF7F2] border border-[#E5D7C9] rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col gap-1.5 lg:hidden animate-in fade-in duration-150">
           {content.navItems.map((item) => (
             <a
               key={item.id}
@@ -201,22 +184,6 @@ export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
               {item.label}
             </a>
           ))}
-
-          {onOpenAdmin && (
-            <div className="pt-2 mt-1 border-t border-[#EAE0D5]">
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAdmin();
-                }}
-                className="w-full px-4 py-2 rounded-2xl bg-[#EFE7DE] hover:bg-[#E5D7C9] text-[#2C180F] font-medium text-xs sm:text-sm transition-colors flex items-center justify-center gap-2"
-              >
-                <Lock className="w-3.5 h-3.5 text-[#BC6C3F]" />
-                <span>Панель управления (Админка)</span>
-              </button>
-            </div>
-          )}
         </div>
       )}
     </header>

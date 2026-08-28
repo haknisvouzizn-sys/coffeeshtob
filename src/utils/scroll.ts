@@ -1,6 +1,9 @@
 let activeAnimationId: number | null = null;
 
-export function smoothScrollTo(elementId: string, duration = 500, offset = -80) {
+/**
+ * Fast, snappy, high-performance smooth scrolling for navbar & in-page anchors.
+ */
+export function smoothScrollTo(elementId: string, duration = 200, offset = -75) {
   const element = document.getElementById(elementId);
   if (!element) return;
 
@@ -17,15 +20,16 @@ export function smoothScrollTo(elementId: string, duration = 500, offset = -80) 
 
   let startTimestamp: number | null = null;
 
-  function easeInOutCubic(t: number): number {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  // Snappy quartic ease-out for ultra-responsive navigation feel
+  function easeOutQuart(t: number): number {
+    return 1 - Math.pow(1 - t, 4);
   }
 
   function step(timestamp: number) {
     if (!startTimestamp) startTimestamp = timestamp;
     const elapsed = timestamp - startTimestamp;
     const progress = Math.min(elapsed / duration, 1);
-    const ease = easeInOutCubic(progress);
+    const ease = easeOutQuart(progress);
 
     window.scrollTo({
       top: startY + diff * ease,
@@ -41,4 +45,3 @@ export function smoothScrollTo(elementId: string, duration = 500, offset = -80) 
 
   activeAnimationId = window.requestAnimationFrame(step);
 }
-

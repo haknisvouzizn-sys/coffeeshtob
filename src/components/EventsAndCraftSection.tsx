@@ -1,4 +1,5 @@
 import React from 'react';
+import { motion } from 'motion/react';
 import { Music, Printer } from 'lucide-react';
 import { EventsAndCraftContent } from '../types';
 
@@ -13,7 +14,14 @@ export const EventsAndCraftSection: React.FC<EventsAndCraftSectionProps> = ({ co
   };
 
   return (
-    <section id="events-and-crafts" className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5]">
+    <motion.section 
+      id="events-and-crafts" 
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-60px" }}
+      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
+      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5]"
+    >
       <div className="max-w-6xl mx-auto">
         
         {/* Section Header */}
@@ -35,14 +43,18 @@ export const EventsAndCraftSection: React.FC<EventsAndCraftSectionProps> = ({ co
             const Icon = getCardIcon(card.icon);
             const isFirst = idx === 0;
             return (
-              <div 
+              <motion.div 
                 key={card.id}
-                className={`${isFirst ? 'md:col-span-7' : 'md:col-span-5'} rounded-3xl p-6 sm:p-8 bg-[#F2EAE0] border border-[#E5D7C9] flex flex-col justify-between shadow-sm transition-all duration-500 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group`}
+                initial={{ opacity: 0, y: 24 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-40px" }}
+                transition={{ duration: 0.45, delay: idx * 0.12, ease: [0.25, 1, 0.5, 1] }}
+                className={`${isFirst ? 'md:col-span-7' : 'md:col-span-5'} rounded-3xl p-6 sm:p-8 bg-[#F2EAE0] border border-[#E5D7C9] flex flex-col justify-between shadow-sm transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group`}
               >
                 <div>
                   <div className="flex items-center justify-between mb-5">
-                    <div className="w-11 h-11 rounded-2xl bg-[#E5D7C9] group-hover:bg-[#BC6C3F] text-[#BC6C3F] group-hover:text-white flex items-center justify-center transition-colors duration-400">
-                      <Icon className="w-5 h-5 transition-transform duration-300 group-hover:scale-110" />
+                    <div className="w-11 h-11 rounded-2xl bg-[#E5D7C9] group-hover:bg-[#BC6C3F] text-[#BC6C3F] group-hover:text-white flex items-center justify-center transition-colors duration-200">
+                      <Icon className="w-5 h-5 transition-transform duration-200 group-hover:scale-110" />
                     </div>
                   </div>
 
@@ -51,12 +63,12 @@ export const EventsAndCraftSection: React.FC<EventsAndCraftSectionProps> = ({ co
                     <img
                       src={card.image}
                       alt={card.title}
-                      className="w-full h-full object-cover group-hover:scale-108 transition-transform duration-700 ease-out"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                       referrerPolicy="no-referrer"
                     />
                   </div>
 
-                  <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#2C180F] mb-3 group-hover:text-[#BC6C3F] transition-colors duration-300">
+                  <h3 className="font-serif text-2xl sm:text-3xl font-bold text-[#2C180F] mb-3 group-hover:text-[#BC6C3F] transition-colors duration-200">
                     {card.title}
                   </h3>
                   
@@ -70,12 +82,12 @@ export const EventsAndCraftSection: React.FC<EventsAndCraftSectionProps> = ({ co
                     </p>
                   )}
                 </div>
-              </div>
+              </motion.div>
             );
           })}
         </div>
 
       </div>
-    </section>
+    </motion.section>
   );
 };

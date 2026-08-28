@@ -1,22 +1,29 @@
 import React from 'react';
-import { Coffee, MapPin, Send, Globe, Compass, ExternalLink, Lock } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Coffee, MapPin, Send, Globe, Compass, ExternalLink } from 'lucide-react';
 import { smoothScrollTo } from '../utils/scroll';
 import { FooterContent, NavItem } from '../types';
 
 interface FooterProps {
   content: FooterContent;
   navItems: NavItem[];
-  onOpenAdmin?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ content, navItems, onOpenAdmin }) => {
+export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
-    smoothScrollTo(id, 450, -75);
+    smoothScrollTo(id, 200, -75);
   };
 
   return (
-    <footer id="contacts" className="bg-[#26170F] text-[#FAF7F2] pt-16 pb-12 px-5 sm:px-8 lg:px-12 border-t border-[#3D281C]">
+    <motion.footer 
+      id="contacts" 
+      initial={{ opacity: 0, y: 20 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: "-40px" }}
+      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
+      className="bg-[#26170F] text-[#FAF7F2] pt-16 pb-12 px-5 sm:px-8 lg:px-12 border-t border-[#3D281C]"
+    >
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8 pb-12 border-b border-[#3D281C]">
           
@@ -136,27 +143,12 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems, onOpenAdmin }
 
         </div>
 
-        {/* Bottom copyright & admin access */}
+        {/* Bottom copyright */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#8A7568]">
           <p>© {new Date().getFullYear()} {content.copyright}</p>
-          
-          <div className="flex items-center gap-4">
-            <span className="text-[11px]">Волжская набережная, 19 · Романов</span>
-            
-            {onOpenAdmin && (
-              <button
-                type="button"
-                onClick={onOpenAdmin}
-                className="inline-flex items-center gap-1 text-[11px] text-[#A68F80] hover:text-[#DE9E68] transition-colors px-2 py-1 rounded-lg hover:bg-[#382015]"
-                title="Панель управления (Ctrl+Shift+A)"
-              >
-                <Lock className="w-3 h-3" />
-                <span>Админка</span>
-              </button>
-            )}
-          </div>
+          <span className="text-[11px]">Волжская набережная, 19 · Романов</span>
         </div>
       </div>
-    </footer>
+    </motion.footer>
   );
 };
