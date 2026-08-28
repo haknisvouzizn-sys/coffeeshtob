@@ -9,6 +9,9 @@
     <meta property="og:description" content="Кофештаб — маленькая кофейня на левом берегу Волги в Романове (Тутаев). Волжская набережная, 19." />
     <meta property="og:type" content="website" />
     
+    <!-- Netlify Identity Widget for Decap CMS authentication and invites -->
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+    
     <!-- Modern Editorial Font Pairing for Artisanal Coffee House -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,6 +19,19 @@
   </head>
   <body class="bg-[#FAF7F2] text-[#2C1F16] antialiased selection:bg-[#BC6C3F]/20 selection:text-[#382015]">
     <div id="root"></div>
+    
+    <!-- Netlify Identity redirect script to send authenticated users to /admin/ -->
+    <script>
+      if (window.netlifyIdentity) {
+        window.netlifyIdentity.on("init", function(user) {
+          if (!user) {
+            window.netlifyIdentity.on("login", function() {
+              document.location.href = "/admin/";
+            });
+          }
+        });
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
