@@ -66,7 +66,7 @@ export const App: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#FAF7F2] text-[#2C1F16] flex flex-col font-sans selection:bg-[#BC6C3F]/20 selection:text-[#382015]">
       {/* Dynamic Header with clean socials modal */}
-      <Header content={content.header} />
+      <Header content={content.header} onOpenAdmin={handleOpenAdmin} />
 
       <main className="flex-1">
         {/* Hero Section */}

@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Coffee, Menu, X, Send, Globe, Compass, ExternalLink } from 'lucide-react';
+import { Coffee, Menu, X, Send, Globe, Compass, ExternalLink, Lock } from 'lucide-react';
 import { smoothScrollTo } from '../utils/scroll';
 import { HeaderContent } from '../types';
 
 interface HeaderProps {
   content: HeaderContent;
+  onOpenAdmin?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ content }) => {
+export const Header: React.FC<HeaderProps> = ({ content, onOpenAdmin }) => {
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [socialsOpen, setSocialsOpen] = useState(false);
@@ -153,6 +154,22 @@ export const Header: React.FC<HeaderProps> = ({ content }) => {
                   );
                 })}
               </div>
+
+              {onOpenAdmin && (
+                <div className="mt-2.5 pt-2 border-t border-[#EAE0D5]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSocialsOpen(false);
+                      onOpenAdmin();
+                    }}
+                    className="w-full px-3 py-1.5 rounded-lg text-xs text-[#735A4B] hover:text-[#BC6C3F] hover:bg-[#EAE0D5] transition-colors flex items-center justify-center gap-1.5"
+                  >
+                    <Lock className="w-3 h-3" />
+                    <span>Панель управления (Админка)</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -184,6 +201,22 @@ export const Header: React.FC<HeaderProps> = ({ content }) => {
               {item.label}
             </a>
           ))}
+
+          {onOpenAdmin && (
+            <div className="pt-2 mt-1 border-t border-[#EAE0D5]">
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  onOpenAdmin();
+                }}
+                className="w-full px-4 py-2 rounded-2xl bg-[#EFE7DE] hover:bg-[#E5D7C9] text-[#2C180F] font-medium text-xs sm:text-sm transition-colors flex items-center justify-center gap-2"
+              >
+                <Lock className="w-3.5 h-3.5 text-[#BC6C3F]" />
+                <span>Панель управления (Админка)</span>
+              </button>
+            </div>
+          )}
         </div>
       )}
     </header>
