@@ -1,5 +1,6 @@
 backend:
-  name: git-gateway
+  name: github
+  repo: your-username/your-repository # Укажите ваш GitHub репозиторий (например: username/coffeeshtob)
   branch: main
 
 # Local backend for local offline development (runs decap-server if needed)

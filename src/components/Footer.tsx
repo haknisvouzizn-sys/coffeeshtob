@@ -1,14 +1,15 @@
 import React from 'react';
-import { Coffee, MapPin, Send, Globe, Compass, ExternalLink } from 'lucide-react';
+import { Coffee, MapPin, Send, Globe, Compass, ExternalLink, Lock } from 'lucide-react';
 import { smoothScrollTo } from '../utils/scroll';
 import { FooterContent, NavItem } from '../types';
 
 interface FooterProps {
   content: FooterContent;
   navItems: NavItem[];
+  onOpenAdmin?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
+export const Footer: React.FC<FooterProps> = ({ content, navItems, onOpenAdmin }) => {
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
     smoothScrollTo(id, 450, -75);
@@ -135,10 +136,25 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
 
         </div>
 
-        {/* Bottom copyright */}
+        {/* Bottom copyright & admin access */}
         <div className="pt-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-[#8A7568]">
           <p>© {new Date().getFullYear()} {content.copyright}</p>
-          <p className="text-[11px]">Волжская набережная, 19 · Романов</p>
+          
+          <div className="flex items-center gap-4">
+            <span className="text-[11px]">Волжская набережная, 19 · Романов</span>
+            
+            {onOpenAdmin && (
+              <button
+                type="button"
+                onClick={onOpenAdmin}
+                className="inline-flex items-center gap-1 text-[11px] text-[#A68F80] hover:text-[#DE9E68] transition-colors px-2 py-1 rounded-lg hover:bg-[#382015]"
+                title="Панель управления (Ctrl+Shift+A)"
+              >
+                <Lock className="w-3 h-3" />
+                <span>Админка</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </footer>

@@ -1,36 +1,66 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { SiteContent } from '../types';
 import { DEFAULT_SITE_CONTENT } from './defaultContent';
 
-export function useSiteContent(): { content: SiteContent; isLoading: boolean } {
+const STORAGE_KEY = 'kofeshtab_site_content_v1';
+
+export function useSiteContent() {
   const [content, setContent] = useState<SiteContent>(DEFAULT_SITE_CONTENT);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Initial load: check localStorage first, then fetch /content.json
   useEffect(() => {
     let isMounted = true;
 
     async function loadContent() {
       try {
+        // 1. Check local storage for user custom edits
+        const savedLocal = localStorage.getItem(STORAGE_KEY);
+        if (savedLocal) {
+          try {
+            const parsed = JSON.parse(savedLocal);
+            if (parsed && typeof parsed === 'object' && isMounted) {
+              setContent({
+                ...DEFAULT_SITE_CONTENT,
+                ...parsed,
+                header: { ...DEFAULT_SITE_CONTENT.header, ...(parsed.header || {}) },
+                hero: { ...DEFAULT_SITE_CONTENT.hero, ...(parsed.hero || {}) },
+                about: { ...DEFAULT_SITE_CONTENT.about, ...(parsed.about || {}) },
+                menu: { ...DEFAULT_SITE_CONTENT.menu, ...(parsed.menu || {}) },
+                eventsAndCraft: { ...DEFAULT_SITE_CONTENT.eventsAndCraft, ...(parsed.eventsAndCraft || {}) },
+                hoursAndTourists: { ...DEFAULT_SITE_CONTENT.hoursAndTourists, ...(parsed.hoursAndTourists || {}) },
+                footer: { ...DEFAULT_SITE_CONTENT.footer, ...(parsed.footer || {}) },
+              });
+              setIsLoading(false);
+              return;
+            }
+          } catch (e) {
+            console.warn('Failed to parse local storage content', e);
+          }
+        }
+
+        // 2. Fetch from public/content.json
         const response = await fetch('/content.json', {
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'
           }
         });
+
         if (response.ok) {
           const json = await response.json();
           if (isMounted && json) {
-            setContent((prev) => ({
-              ...prev,
+            setContent({
+              ...DEFAULT_SITE_CONTENT,
               ...json,
-              header: { ...prev.header, ...(json.header || {}) },
-              hero: { ...prev.hero, ...(json.hero || {}) },
-              about: { ...prev.about, ...(json.about || {}) },
-              menu: { ...prev.menu, ...(json.menu || {}) },
-              eventsAndCraft: { ...prev.eventsAndCraft, ...(json.eventsAndCraft || {}) },
-              hoursAndTourists: { ...prev.hoursAndTourists, ...(json.hoursAndTourists || {}) },
-              footer: { ...prev.footer, ...(json.footer || {}) },
-            }));
+              header: { ...DEFAULT_SITE_CONTENT.header, ...(json.header || {}) },
+              hero: { ...DEFAULT_SITE_CONTENT.hero, ...(json.hero || {}) },
+              about: { ...DEFAULT_SITE_CONTENT.about, ...(json.about || {}) },
+              menu: { ...DEFAULT_SITE_CONTENT.menu, ...(json.menu || {}) },
+              eventsAndCraft: { ...DEFAULT_SITE_CONTENT.eventsAndCraft, ...(json.eventsAndCraft || {}) },
+              hoursAndTourists: { ...DEFAULT_SITE_CONTENT.hoursAndTourists, ...(json.hoursAndTourists || {}) },
+              footer: { ...DEFAULT_SITE_CONTENT.footer, ...(json.footer || {}) },
+            });
           }
         }
       } catch (err) {
@@ -49,5 +79,38 @@ export function useSiteContent(): { content: SiteContent; isLoading: boolean } {
     };
   }, []);
 
-  return { content, isLoading };
+  // Save updated content to localStorage and state
+  const updateContent = useCallback((newContent: SiteContent) => {
+    setContent(newContent);
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(newContent));
+    } catch (e) {
+      console.error('Failed to save to localStorage', e);
+    }
+  }, []);
+
+  // Reset content to defaults
+  const resetToDefault = useCallback(() => {
+    localStorage.removeItem(STORAGE_KEY);
+    setContent(DEFAULT_SITE_CONTENT);
+  }, []);
+
+  // Download content as content.json file
+  const exportJson = useCallback(() => {
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(content, null, 2));
+    const downloadAnchor = document.createElement('a');
+    downloadAnchor.setAttribute("href", dataStr);
+    downloadAnchor.setAttribute("download", "content.json");
+    document.body.appendChild(downloadAnchor);
+    downloadAnchor.click();
+    downloadAnchor.remove();
+  }, [content]);
+
+  return { 
+    content, 
+    isLoading, 
+    updateContent, 
+    resetToDefault,
+    exportJson 
+  };
 }
