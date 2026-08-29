@@ -11,11 +11,11 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
   return (
     <motion.section 
       id="menu" 
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
-      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5]"
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5] transform-gpu will-change-[opacity,transform]"
     >
       <div className="max-w-6xl mx-auto">
         
@@ -34,13 +34,9 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
 
         {/* 4 Cards Grid with Smooth Hover Interactions */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10 sm:mb-12">
-          {content.highlightCards.map((card, idx) => (
-            <motion.div
+          {content.highlightCards.map((card) => (
+            <div
               key={card.id}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true, margin: "-40px" }}
-              transition={{ duration: 0.4, delay: idx * 0.08, ease: [0.25, 1, 0.5, 1] }}
               className="flex flex-col rounded-3xl overflow-hidden bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group cursor-default"
             >
               {/* Photo Area */}
@@ -65,18 +61,12 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
                   {card.description}
                 </p>
               </div>
-            </motion.div>
+            </div>
           ))}
         </div>
 
         {/* Additional Drinks & Porcelain Serving Banner */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
-          className="rounded-3xl p-6 sm:p-8 lg:p-10 bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-300 ease-out hover:shadow-md"
-        >
+        <div className="rounded-3xl p-6 sm:p-8 lg:p-10 bg-[#F2EAE0] border border-[#E5D7C9] shadow-sm transition-all duration-300 ease-out hover:shadow-md">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 pb-6 mb-6 border-b border-[#E0D0C0]">
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-[#BC6C3F] block mb-1">
@@ -109,7 +99,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
               </div>
             ))}
           </div>
-        </motion.div>
+        </div>
 
       </div>
     </motion.section>

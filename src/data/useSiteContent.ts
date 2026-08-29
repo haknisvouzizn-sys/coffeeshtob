@@ -20,10 +20,19 @@ export function useSiteContent() {
           try {
             const parsed = JSON.parse(savedLocal);
             if (parsed && typeof parsed === 'object' && isMounted) {
+              // Ensure no stray admin item is in navItems from previous versions
+              const sanitizedNavItems = (parsed.header?.navItems || DEFAULT_SITE_CONTENT.header.navItems).filter(
+                (item: { id: string; label: string }) => item.id !== 'admin' && !item.label.toLowerCase().includes('админ')
+              );
+
               setContent({
                 ...DEFAULT_SITE_CONTENT,
                 ...parsed,
-                header: { ...DEFAULT_SITE_CONTENT.header, ...(parsed.header || {}) },
+                header: { 
+                  ...DEFAULT_SITE_CONTENT.header, 
+                  ...(parsed.header || {}),
+                  navItems: sanitizedNavItems
+                },
                 hero: { ...DEFAULT_SITE_CONTENT.hero, ...(parsed.hero || {}) },
                 about: { ...DEFAULT_SITE_CONTENT.about, ...(parsed.about || {}) },
                 menu: { ...DEFAULT_SITE_CONTENT.menu, ...(parsed.menu || {}) },

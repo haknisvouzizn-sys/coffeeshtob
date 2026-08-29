@@ -25,23 +25,17 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ content }) => {
   return (
     <motion.section 
       id="about" 
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
-      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2]"
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] transform-gpu will-change-[opacity,transform]"
     >
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-center">
           
           {/* Left Column: Photo Card */}
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.96 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.45, delay: 0.1, ease: [0.25, 1, 0.5, 1] }}
-            className="lg:col-span-6 relative"
-          >
+          <div className="lg:col-span-6 relative">
             <div className="relative rounded-3xl overflow-hidden bg-[#EFE7DE] border border-[#E3D4C5] shadow-md transition-all duration-300 ease-out hover:shadow-xl group">
               <img
                 src={content.image}
@@ -63,16 +57,10 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ content }) => {
                 </div>
               </div>
             </div>
-          </motion.div>
+          </div>
 
           {/* Right Column: Story & Highlights */}
-          <motion.div 
-            initial={{ opacity: 0, x: 20 }}
-            whileInView={{ opacity: 1, x: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.45, delay: 0.15, ease: [0.25, 1, 0.5, 1] }}
-            className="lg:col-span-6 flex flex-col justify-center space-y-6 sm:space-y-7"
-          >
+          <div className="lg:col-span-6 flex flex-col justify-center space-y-6 sm:space-y-7">
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-[#BC6C3F] block mb-2">
                 {content.sectionTag}
@@ -113,7 +101,7 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ content }) => {
               })}
             </div>
 
-          </motion.div>
+          </div>
 
         </div>
       </div>

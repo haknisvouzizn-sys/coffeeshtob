@@ -11,11 +11,11 @@ export const HoursAndTouristsSection: React.FC<HoursAndTouristsSectionProps> = (
   return (
     <motion.section 
       id="hours" 
-      initial={{ opacity: 0, y: 30 }}
+      initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-60px" }}
-      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
-      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5]"
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="py-16 sm:py-24 px-5 sm:px-8 lg:px-12 bg-[#FAF7F2] border-t border-[#EAE0D5] transform-gpu will-change-[opacity,transform]"
     >
       <div className="max-w-6xl mx-auto">
         
@@ -36,11 +36,7 @@ export const HoursAndTouristsSection: React.FC<HoursAndTouristsSectionProps> = (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-stretch mb-8">
           
           {/* Card 1: График работы */}
-          <motion.div 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{ duration: 0.4, delay: 0.05, ease: [0.25, 1, 0.5, 1] }}
+          <div 
             className="lg:col-span-6 rounded-3xl p-6 sm:p-10 bg-[#F2EAE0] border border-[#E5D7C9] flex flex-col justify-between shadow-sm transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group"
           >
             <div>
@@ -64,15 +60,11 @@ export const HoursAndTouristsSection: React.FC<HoursAndTouristsSectionProps> = (
             <p className="text-xs sm:text-sm text-[#73594A] leading-relaxed pt-4 border-t border-[#E2D4C6]">
               {content.hoursCard.note}
             </p>
-          </motion.div>
+          </div>
 
           {/* Card 2: Гостям города */}
-          <motion.div 
+          <div 
             id="tourists" 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-40px" }}
-            transition={{ duration: 0.4, delay: 0.1, ease: [0.25, 1, 0.5, 1] }}
             className="lg:col-span-6 rounded-3xl p-6 sm:p-10 bg-[#F2EAE0] border border-[#E5D7C9] text-[#2C180F] shadow-sm flex flex-col justify-between transition-all duration-300 ease-out hover:-translate-y-1.5 hover:shadow-xl hover:border-[#D4BFA9] group"
           >
             <div>
@@ -100,16 +92,12 @@ export const HoursAndTouristsSection: React.FC<HoursAndTouristsSectionProps> = (
                 <ExternalLink className="w-4 h-4 transition-transform group-hover/btn:translate-x-0.5" />
               </a>
             </div>
-          </motion.div>
+          </div>
 
         </div>
 
         {/* Tourist Crossing Information Banner */}
-        <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true, margin: "-40px" }}
-          transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
+        <div 
           className="rounded-3xl p-6 sm:p-8 bg-[#F2EAE0] border border-[#E5D7C9] flex flex-col md:flex-row items-start md:items-center justify-between gap-6 shadow-sm transition-all duration-300 ease-out hover:shadow-md hover:border-[#D4BFA9] group"
         >
           <div className="flex items-start gap-4">
@@ -125,7 +113,7 @@ export const HoursAndTouristsSection: React.FC<HoursAndTouristsSectionProps> = (
               </p>
             </div>
           </div>
-        </motion.div>
+        </div>
 
       </div>
     </motion.section>

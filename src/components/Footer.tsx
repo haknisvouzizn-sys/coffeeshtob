@@ -15,14 +15,19 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
     smoothScrollTo(id, 200, -75);
   };
 
+  // Filter out any unwanted or administrative navigation items
+  const cleanNavItems = (navItems || []).filter(
+    item => item.id !== 'admin' && !item.label.toLowerCase().includes('админ')
+  );
+
   return (
     <motion.footer 
       id="contacts" 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, margin: "-40px" }}
-      transition={{ duration: 0.45, ease: [0.25, 1, 0.5, 1] }}
-      className="bg-[#26170F] text-[#FAF7F2] pt-16 pb-12 px-5 sm:px-8 lg:px-12 border-t border-[#3D281C]"
+      viewport={{ once: true, amount: 0.1 }}
+      transition={{ duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+      className="bg-[#26170F] text-[#FAF7F2] pt-16 pb-12 px-5 sm:px-8 lg:px-12 border-t border-[#3D281C] transform-gpu will-change-[opacity,transform]"
     >
       <div className="max-w-6xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-10 lg:gap-8 pb-12 border-b border-[#3D281C]">
@@ -79,7 +84,7 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
               {content.navTitle}
             </h4>
             <ul className="space-y-2 text-sm text-[#CDB9AA]">
-              {navItems.map((item) => (
+              {cleanNavItems.map((item) => (
                 <li key={item.id}>
                   <a
                     href={`#${item.id}`}

@@ -49,6 +49,11 @@ export const Header: React.FC<HeaderProps> = ({ content }) => {
     return Compass;
   };
 
+  // Filter out any admin-related nav items
+  const cleanNavItems = (content.navItems || []).filter(
+    item => item.id !== 'admin' && !item.label.toLowerCase().includes('админ')
+  );
+
   return (
     <header className="fixed top-0 left-0 right-0 z-50 flex justify-center px-4 pt-3 sm:pt-5 pointer-events-none transition-all duration-200">
       <div 
@@ -79,7 +84,7 @@ export const Header: React.FC<HeaderProps> = ({ content }) => {
 
         {/* Desktop Navigation Links */}
         <nav className="hidden lg:flex items-center gap-7 text-xs font-semibold tracking-wide text-[#553E31]">
-          {content.navItems.map((item) => (
+          {cleanNavItems.map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
@@ -174,7 +179,7 @@ export const Header: React.FC<HeaderProps> = ({ content }) => {
       {/* Mobile Dropdown Menu */}
       {mobileMenuOpen && (
         <div className="pointer-events-auto absolute top-16 sm:top-20 left-4 right-4 bg-[#FAF7F2] border border-[#E5D7C9] rounded-3xl p-4 sm:p-5 shadow-xl flex flex-col gap-1.5 lg:hidden animate-in fade-in duration-150">
-          {content.navItems.map((item) => (
+          {cleanNavItems.map((item) => (
             <a
               key={item.id}
               href={`#${item.id}`}
