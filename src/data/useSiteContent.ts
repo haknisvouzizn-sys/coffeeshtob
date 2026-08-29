@@ -18,42 +18,35 @@ export function useSiteContent() {
         localStorage.removeItem('kofeshtab_site_content_v1');
         localStorage.removeItem('kofeshtab_site_content_v2');
 
-        // 1. Check local storage for user custom edits
+        // 1. First fetch fresh content from public/content.json (with cache buster timestamp)
+        try {
+          const response = await fetch(`/content.json?t=${Date.now()}`, {
+            cache: 'no-store',
+            headers: {
+              'Cache-Control': 'no-cache, no-store, must-revalidate',
+              'Pragma': 'no-cache'
+            }
+          });
+
+          if (response.ok) {
+            const json = await response.json();
+            if (isMounted && json) {
+              setContent(json);
+              setIsLoading(false);
+              return;
+            }
+          }
+        } catch (fetchErr) {
+          console.warn('Could not fetch /content.json dynamically, checking localStorage:', fetchErr);
+        }
+
+        // 2. Check local storage if remote fetch is not available
         const savedLocal = localStorage.getItem(STORAGE_KEY);
-        if (savedLocal) {
+        if (savedLocal && isMounted) {
           try {
             const parsed = JSON.parse(savedLocal);
-            if (parsed && typeof parsed === 'object' && isMounted) {
-              // Ensure no stray admin item is in navItems from previous versions
-              const sanitizedNavItems = (parsed.header?.navItems || DEFAULT_SITE_CONTENT.header.navItems).filter(
-                (item: { id: string; label: string }) => item.id !== 'admin' && !item.label.toLowerCase().includes('админ')
-              );
-
-              // Filter out deprecated items like seasonal vzvary from legacy cache
-              const rawDrinks = parsed.menu?.additionalDrinks || DEFAULT_SITE_CONTENT.menu.additionalDrinks;
-              const sanitizedDrinks = rawDrinks.filter(
-                (d: { title: string }) => !d.title.toLowerCase().includes('взвар')
-              );
-
-              setContent({
-                ...DEFAULT_SITE_CONTENT,
-                ...parsed,
-                header: { 
-                  ...DEFAULT_SITE_CONTENT.header, 
-                  ...(parsed.header || {}),
-                  navItems: sanitizedNavItems
-                },
-                hero: { ...DEFAULT_SITE_CONTENT.hero, ...(parsed.hero || {}) },
-                about: { ...DEFAULT_SITE_CONTENT.about, ...(parsed.about || {}) },
-                menu: { 
-                  ...DEFAULT_SITE_CONTENT.menu, 
-                  ...(parsed.menu || {}),
-                  additionalDrinks: sanitizedDrinks
-                },
-                eventsAndCraft: { ...DEFAULT_SITE_CONTENT.eventsAndCraft, ...(parsed.eventsAndCraft || {}) },
-                hoursAndTourists: { ...DEFAULT_SITE_CONTENT.hoursAndTourists, ...(parsed.hoursAndTourists || {}) },
-                footer: { ...DEFAULT_SITE_CONTENT.footer, ...(parsed.footer || {}) },
-              });
+            if (parsed && typeof parsed === 'object') {
+              setContent(parsed);
               setIsLoading(false);
               return;
             }
@@ -61,33 +54,8 @@ export function useSiteContent() {
             console.warn('Failed to parse local storage content', e);
           }
         }
-
-        // 2. Fetch from public/content.json
-        const response = await fetch('/content.json', {
-          headers: {
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
-          }
-        });
-
-        if (response.ok) {
-          const json = await response.json();
-          if (isMounted && json) {
-            setContent({
-              ...DEFAULT_SITE_CONTENT,
-              ...json,
-              header: { ...DEFAULT_SITE_CONTENT.header, ...(json.header || {}) },
-              hero: { ...DEFAULT_SITE_CONTENT.hero, ...(json.hero || {}) },
-              about: { ...DEFAULT_SITE_CONTENT.about, ...(json.about || {}) },
-              menu: { ...DEFAULT_SITE_CONTENT.menu, ...(json.menu || {}) },
-              eventsAndCraft: { ...DEFAULT_SITE_CONTENT.eventsAndCraft, ...(json.eventsAndCraft || {}) },
-              hoursAndTourists: { ...DEFAULT_SITE_CONTENT.hoursAndTourists, ...(json.hoursAndTourists || {}) },
-              footer: { ...DEFAULT_SITE_CONTENT.footer, ...(json.footer || {}) },
-            });
-          }
-        }
       } catch (err) {
-        console.warn('Could not dynamically load /content.json, using default content:', err);
+        console.warn('Could not load content:', err);
       } finally {
         if (isMounted) {
           setIsLoading(false);
