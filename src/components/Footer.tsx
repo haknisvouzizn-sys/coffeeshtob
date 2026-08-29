@@ -144,21 +144,11 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems, onOpenAdmin }
 
         </div>
 
-        {/* Bottom copyright & Admin Link */}
+        {/* Bottom copyright */}
         <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#8E796D]">
           <p>© {new Date().getFullYear()} {content.copyright}</p>
           <div className="flex items-center gap-4">
             <span className="text-[11px]">{content.bottomAddress || "Волжская набережная, 19 · Романов"}</span>
-            {onOpenAdmin && (
-              <button
-                type="button"
-                onClick={onOpenAdmin}
-                className="text-[10px] text-[#6E594D] hover:text-[#C97D5D] transition-colors cursor-pointer"
-                title="Панель администратора"
-              >
-                Управление
-              </button>
-            )}
           </div>
         </div>
       </div>

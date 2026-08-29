@@ -24,7 +24,10 @@ import {
   GitCommit,
   ExternalLink,
   CheckCircle2,
-  RefreshCw
+  RefreshCw,
+  Shield,
+  KeyRound,
+  ShieldCheck
 } from 'lucide-react';
 import { SiteContent } from '../../types';
 import { 
@@ -34,6 +37,18 @@ import {
   testGitHubConnection, 
   GitHubConfig 
 } from '../../utils/githubSync';
+import { 
+  verifyAdminPassword, 
+  changeAdminPassword, 
+  resetAdminPasswordToDefault, 
+  hasCustomPassword,
+  checkLockout,
+  recordFailedAttempt,
+  resetLockout,
+  setSessionWithExpiry,
+  isSessionValid,
+  clearAdminSession
+} from '../../utils/security';
 import { ImageUploadField } from './ImageUploadField';
 
 interface AdminPanelProps {
@@ -65,6 +80,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
 
+  // Security & Password change state
+  const [lockout, setLockout] = useState(checkLockout());
+  const [oldPassword, setOldPassword] = useState<string>("");
+  const [newPassword, setNewPassword] = useState<string>("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState<string>("");
+  const [pwdChangeStatus, setPwdChangeStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [isCustomPwdActive, setIsCustomPwdActive] = useState<boolean>(hasCustomPassword());
+  const [showNewPwd, setShowNewPwd] = useState<boolean>(false);
+
   // GitHub Sync State
   const [ghConfig, setGhConfig] = useState<GitHubConfig>(getStoredGitHubConfig());
   const [showGhToken, setShowGhToken] = useState<boolean>(false);
@@ -75,12 +99,29 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     if (isOpen) {
       setFormData(content);
       setGhConfig(getStoredGitHubConfig());
-      const auth = sessionStorage.getItem(AUTH_STORAGE_KEY);
-      if (auth === "true") {
+      setIsCustomPwdActive(hasCustomPassword());
+      setLockout(checkLockout());
+
+      if (isSessionValid()) {
         setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
       }
     }
   }, [isOpen, content]);
+
+  // Lockout countdown timer
+  useEffect(() => {
+    if (!lockout.isLocked) return;
+    const interval = setInterval(() => {
+      const current = checkLockout();
+      setLockout(current);
+      if (!current.isLocked) {
+        clearInterval(interval);
+      }
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [lockout.isLocked]);
 
   const handleUpdateGhConfig = (newCfg: Partial<GitHubConfig>) => {
     const updated = { ...ghConfig, ...newCfg };
@@ -126,21 +167,80 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (passwordInput === DEFAULT_ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem(AUTH_STORAGE_KEY, "true");
-      setPasswordError("");
-    } else {
-      setPasswordError("Неверный пароль администратора");
+    const currentLock = checkLockout();
+    if (currentLock.isLocked) {
+      setPasswordError(`Вход временно заблокирован. Подождите ${currentLock.remainingSeconds} сек.`);
+      return;
+    }
+
+    try {
+      const isValid = await verifyAdminPassword(passwordInput);
+      if (isValid) {
+        setIsAuthenticated(true);
+        setSessionWithExpiry(120); // 2 hours session
+        resetLockout();
+        setPasswordError("");
+        setPasswordInput("");
+      } else {
+        const afterFail = recordFailedAttempt();
+        setLockout(afterFail);
+        if (afterFail.isLocked) {
+          setPasswordError(`Слишком много неверных попыток. Вход заблокирован на 2 минуты.`);
+        } else {
+          setPasswordError(`Неверный пароль. Осталось попыток: ${afterFail.attemptsLeft}`);
+        }
+      }
+    } catch (err) {
+      setPasswordError("Ошибка при проверке пароля: " + (err as Error).message);
     }
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
-    sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    clearAdminSession();
     setPasswordInput("");
+  };
+
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwdChangeStatus(null);
+
+    if (newPassword.length < 6) {
+      setPwdChangeStatus({ type: 'error', message: 'Новый пароль должен содержать не менее 6 символов.' });
+      return;
+    }
+
+    if (newPassword !== confirmNewPassword) {
+      setPwdChangeStatus({ type: 'error', message: 'Новые пароли не совпадают.' });
+      return;
+    }
+
+    const isOldValid = await verifyAdminPassword(oldPassword);
+    if (!isOldValid) {
+      setPwdChangeStatus({ type: 'error', message: 'Текущий пароль введен неверно.' });
+      return;
+    }
+
+    try {
+      await changeAdminPassword(newPassword);
+      setIsCustomPwdActive(true);
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
+      setPwdChangeStatus({ type: 'success', message: 'Пароль администратора успешно изменен и защищен SHA-256 хешированием!' });
+    } catch (err) {
+      setPwdChangeStatus({ type: 'error', message: (err as Error).message });
+    }
+  };
+
+  const handleResetPasswordDefault = () => {
+    if (confirm("Вернуть пароль по умолчанию (kofeshtab2025)?")) {
+      resetAdminPasswordToDefault();
+      setIsCustomPwdActive(false);
+      setPwdChangeStatus({ type: 'success', message: 'Пароль сброшен к стандартному (kofeshtab2025).' });
+    }
   };
 
   const handleSaveChanges = () => {
@@ -187,6 +287,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     { id: "eventsAndCraft", label: "Жизнь штаба", icon: Calendar },
     { id: "hoursAndTourists", label: "График и гости", icon: Clock },
     { id: "footer", label: "Подвал и контакты", icon: MapPin },
+    { id: "security", label: "Безопасность и пароль", icon: Shield },
     { id: "github", label: "Синхронизация с GitHub", icon: GitBranch },
   ];
 
@@ -1593,6 +1694,174 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         />
                       </div>
                     </div>
+                  </div>
+                </div>
+              )}
+
+              {/* TAB: SECURITY & PASSWORD */}
+              {activeTab === "security" && (
+                <div className="space-y-5">
+                  <div className="border-b border-[#E5DACD] pb-3">
+                    <h4 className="font-heading font-bold text-lg text-[#2D1E16] flex items-center gap-2">
+                      <ShieldCheck className="w-5 h-5 text-[#C97D5D]" />
+                      <span>Безопасность и смена пароля</span>
+                    </h4>
+                    <p className="text-xs text-[#7A6456]">
+                      Управление доступом к панели администратора, защита от перебора и хеширование паролей
+                    </p>
+                  </div>
+
+                  {/* Security Highlights */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div className="p-3.5 bg-white rounded-2xl border border-[#E5DACD] space-y-1">
+                      <div className="flex items-center gap-2 text-[#C97D5D]">
+                        <KeyRound className="w-4 h-4" />
+                        <span className="text-xs font-bold text-[#2D1E16]">Статус пароля</span>
+                      </div>
+                      <p className="text-xs font-semibold text-[#8C7465]">
+                        {isCustomPwdActive ? (
+                          <span className="text-emerald-700 font-bold">✓ Установлен личный пароль</span>
+                        ) : (
+                          <span className="text-amber-700 font-bold">Стандартный пароль</span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-[#8E796D]">Хранится в зашифрованном виде SHA-256 с солью</p>
+                    </div>
+
+                    <div className="p-3.5 bg-white rounded-2xl border border-[#E5DACD] space-y-1">
+                      <div className="flex items-center gap-2 text-[#C97D5D]">
+                        <Shield className="w-4 h-4" />
+                        <span className="text-xs font-bold text-[#2D1E16]">Anti-Brute Force</span>
+                      </div>
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Активна (5 попыток)
+                      </p>
+                      <p className="text-[11px] text-[#8E796D]">Блокировка на 2 минуты при частых ошибках ввода</p>
+                    </div>
+
+                    <div className="p-3.5 bg-white rounded-2xl border border-[#E5DACD] space-y-1">
+                      <div className="flex items-center gap-2 text-[#C97D5D]">
+                        <Clock className="w-4 h-4" />
+                        <span className="text-xs font-bold text-[#2D1E16]">Сессия</span>
+                      </div>
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Автовыход через 2 часа
+                      </p>
+                      <p className="text-[11px] text-[#8E796D]">Сессия защищена от утечек</p>
+                    </div>
+                  </div>
+
+                  {/* Password Change Form */}
+                  <div className="bg-white p-5 rounded-2xl border border-[#E5DACD] space-y-4">
+                    <h5 className="font-heading font-bold text-sm text-[#2D1E16] flex items-center gap-2">
+                      <KeyRound className="w-4 h-4 text-[#C97D5D]" />
+                      <span>Изменить пароль администратора</span>
+                    </h5>
+
+                    <form onSubmit={handleChangePasswordSubmit} className="space-y-3.5 max-w-md">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">
+                          Текущий пароль
+                        </label>
+                        <input
+                          type={showNewPwd ? "text" : "password"}
+                          value={oldPassword}
+                          onChange={(e) => setOldPassword(e.target.value)}
+                          placeholder="Введите старый пароль"
+                          required
+                          className="w-full px-3.5 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">
+                          Новый пароль (минимум 6 символов)
+                        </label>
+                        <input
+                          type={showNewPwd ? "text" : "password"}
+                          value={newPassword}
+                          onChange={(e) => setNewPassword(e.target.value)}
+                          placeholder="Введите новый надежный пароль"
+                          required
+                          minLength={6}
+                          className="w-full px-3.5 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">
+                          Подтверждение нового пароля
+                        </label>
+                        <input
+                          type={showNewPwd ? "text" : "password"}
+                          value={confirmNewPassword}
+                          onChange={(e) => setConfirmNewPassword(e.target.value)}
+                          placeholder="Повторите новый пароль"
+                          required
+                          minLength={6}
+                          className="w-full px-3.5 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setShowNewPwd(!showNewPwd)}
+                          className="text-xs text-[#8E796D] hover:text-[#2D1E16] flex items-center gap-1.5 cursor-pointer py-1"
+                        >
+                          {showNewPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          <span>{showNewPwd ? "Скрыть вводимые пароли" : "Показать вводимые пароли"}</span>
+                        </button>
+                      </div>
+
+                      {pwdChangeStatus && (
+                        <div
+                          className={`p-3 rounded-xl text-xs flex items-start gap-2 animate-in fade-in duration-150 ${
+                            pwdChangeStatus.type === 'success'
+                              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                              : 'bg-red-50 border border-red-200 text-red-700'
+                          }`}
+                        >
+                          {pwdChangeStatus.type === 'success' ? (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+                          )}
+                          <span>{pwdChangeStatus.message}</span>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2.5 pt-2">
+                        <button
+                          type="submit"
+                          className="px-5 py-2 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                          <span>Сохранить новый пароль</span>
+                        </button>
+
+                        {isCustomPwdActive && (
+                          <button
+                            type="button"
+                            onClick={handleResetPasswordDefault}
+                            className="px-4 py-2 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-semibold transition-colors cursor-pointer"
+                          >
+                            Сбросить к стандартному
+                          </button>
+                        )}
+                      </div>
+                    </form>
+                  </div>
+
+                  {/* Public URL and access information */}
+                  <div className="bg-[#FAF7F2] p-4 rounded-2xl border border-[#E5DACD] space-y-2">
+                    <h6 className="font-heading font-bold text-xs text-[#2D1E16]">
+                      Как открывать админку после скрытия ссылки в подвале:
+                    </h6>
+                    <ul className="text-xs text-[#664D3E] space-y-1 list-disc list-inside">
+                      <li>Через адресную строку: добавьте <strong>/admin</strong> или <strong>#admin</strong> в конце адреса сайта.</li>
+                      <li>Быстрое сочетание клавиш на клавиатуре: <strong>Ctrl + Shift + A</strong> (или <strong>Cmd + Shift + A</strong> на Mac).</li>
+                    </ul>
                   </div>
                 </div>
               )}
