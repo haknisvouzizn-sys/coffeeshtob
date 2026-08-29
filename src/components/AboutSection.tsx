@@ -35,7 +35,9 @@ export const AboutSection: React.FC<AboutSectionProps> = ({ content }) => {
               <img
                 src={content.image}
                 alt={content.title}
-                className="w-full aspect-[4/4.2] object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out"
+                loading="lazy"
+                decoding="async"
+                className="w-full aspect-[4/4.2] object-cover object-center group-hover:scale-105 transition-transform duration-500 ease-out will-change-transform"
                 referrerPolicy="no-referrer"
               />
 

@@ -87,7 +87,8 @@ export const App: React.FC = () => {
       {/* Footer */}
       <Footer 
         content={content.footer} 
-        navItems={content.header.navItems} 
+        navItems={content.header.navItems}
+        onOpenAdmin={() => setIsAdminOpen(true)}
       />
 
       {/* Minimalist Admin Panel */}

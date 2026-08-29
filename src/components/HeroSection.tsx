@@ -15,11 +15,14 @@ export const HeroSection: React.FC<HeroSectionProps> = ({ content, onExploreMenu
       className="relative min-h-[85vh] sm:min-h-[88vh] md:min-h-[92vh] lg:min-h-screen flex items-center pt-20 sm:pt-22 md:pt-24 lg:pt-32 pb-12 sm:pb-14 md:pb-16 lg:pb-20 px-4 sm:px-6 md:px-8 lg:px-12 bg-[#271810] text-[#FAF7F2] overflow-hidden"
     >
       {/* Background Image with Dark Pastel Vignette Overlay */}
-      <div className="absolute inset-0 z-0">
+      <div className="absolute inset-0 z-0 pointer-events-none">
         <img
           src={content.bgImage}
           alt={content.title}
-          className="w-full h-full object-cover object-center opacity-35 scale-105"
+          loading="eager"
+          decoding="async"
+          fetchPriority="high"
+          className="w-full h-full object-cover object-center opacity-35 scale-105 will-change-transform"
           referrerPolicy="no-referrer"
         />
         <div className="absolute inset-0 bg-gradient-to-t from-[#271810] via-[#271810]/85 to-[#271810]/50" />

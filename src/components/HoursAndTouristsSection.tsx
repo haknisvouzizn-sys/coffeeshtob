@@ -47,20 +47,20 @@ export const HoursAndTouristsSection: React.FC<HoursAndTouristsSectionProps> = (
                 {/* Будни */}
                 <div className="p-3.5 sm:p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D4C6] flex flex-col sm:flex-row sm:items-center justify-between gap-1 shadow-2xs">
                   <span className="text-xs font-semibold uppercase tracking-wider text-[#826A5A]">
-                    Будни (Пн–Пт)
+                    {content.hoursCard.weekdaysLabel || "Будни (Пн–Пт)"}
                   </span>
                   <span className="font-heading font-bold text-lg sm:text-xl text-[#2D1E16] tracking-wide">
-                    {content.hoursCard.weekdaysSchedule || "10:00 — 19:00"}
+                    {content.hoursCard.weekdaysSchedule || "11:00-20:00"}
                   </span>
                 </div>
 
                 {/* Выходные и праздники */}
                 <div className="p-3.5 sm:p-4 rounded-2xl bg-[#FAF7F2] border border-[#E2D4C6] flex flex-col sm:flex-row sm:items-center justify-between gap-1 shadow-2xs">
                   <span className="text-xs font-semibold uppercase tracking-wider text-[#C97D5D]">
-                    Выходные и праздники
+                    {content.hoursCard.weekendsLabel || "Выходные и праздники"}
                   </span>
                   <span className="font-heading font-bold text-lg sm:text-xl text-[#C97D5D] tracking-wide">
-                    {content.hoursCard.weekendsSchedule || "09:00 — 20:00"}
+                    {content.hoursCard.weekendsSchedule || "10:00-20:00"}
                   </span>
                 </div>
               </div>

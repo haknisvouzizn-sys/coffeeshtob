@@ -6,9 +6,10 @@ import { FooterContent, NavItem } from '../types';
 interface FooterProps {
   content: FooterContent;
   navItems: NavItem[];
+  onOpenAdmin?: () => void;
 }
 
-export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
+export const Footer: React.FC<FooterProps> = ({ content, navItems, onOpenAdmin }) => {
   const handleNavClick = (e: React.MouseEvent<HTMLAnchorElement>, id: string) => {
     e.preventDefault();
     smoothScrollTo(id, 200, -75);
@@ -62,12 +63,12 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
             </p>
             <div className="pt-1 pl-6.5">
               <a
-                href="https://yandex.ru/maps/?text=Тутаев+Волжская+набережная+19+Кофештаб"
+                href={content.mapsUrl || "https://yandex.ru/maps/?text=Тутаев+Волжская+набережная+19+Кофештаб"}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 text-xs text-[#E09D77] hover:text-[#FAF7F2] transition-colors"
               >
-                <span>Открыть на Яндекс.Картах</span>
+                <span>{content.mapsButtonText || "Открыть на Яндекс.Картах"}</span>
                 <ExternalLink className="w-3 h-3" />
               </a>
             </div>
@@ -108,7 +109,7 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
               >
                 <div className="flex items-center gap-2.5">
                   <Send className="w-4 h-4 text-[#E09D77]" />
-                  <span>Telegram-канал</span>
+                  <span>{content.telegramLabel || "Telegram-канал"}</span>
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-[#9E8A7D] group-hover:text-white transition-colors" />
               </a>
@@ -121,7 +122,7 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
               >
                 <div className="flex items-center gap-2.5">
                   <Globe className="w-4 h-4 text-[#E09D77]" />
-                  <span>ВКонтакте</span>
+                  <span>{content.vkLabel || "ВКонтакте"}</span>
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-[#9E8A7D] group-hover:text-white transition-colors" />
               </a>
@@ -134,7 +135,7 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
               >
                 <div className="flex items-center gap-2.5">
                   <Compass className="w-4 h-4 text-[#E09D77]" />
-                  <span>Гид по Романову</span>
+                  <span>{content.guideLabel || "Гид по Романову"}</span>
                 </div>
                 <ExternalLink className="w-3.5 h-3.5 text-[#9E8A7D] group-hover:text-white transition-colors" />
               </a>
@@ -143,10 +144,22 @@ export const Footer: React.FC<FooterProps> = ({ content, navItems }) => {
 
         </div>
 
-        {/* Bottom copyright */}
+        {/* Bottom copyright & Admin Link */}
         <div className="pt-6 sm:pt-8 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#8E796D]">
           <p>© {new Date().getFullYear()} {content.copyright}</p>
-          <span className="text-[11px]">Волжская набережная, 19 · Романов</span>
+          <div className="flex items-center gap-4">
+            <span className="text-[11px]">{content.bottomAddress || "Волжская набережная, 19 · Романов"}</span>
+            {onOpenAdmin && (
+              <button
+                type="button"
+                onClick={onOpenAdmin}
+                className="text-[10px] text-[#6E594D] hover:text-[#C97D5D] transition-colors cursor-pointer"
+                title="Панель администратора"
+              >
+                Управление
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </footer>

@@ -9,14 +9,28 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ content }) => {
   const [isScrolled, setIsScrolled] = useState(false);
+  const isScrolledRef = useRef(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [socialsOpen, setSocialsOpen] = useState(false);
   const socialsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    let ticking = false;
+
     const handleScroll = () => {
-      setIsScrolled(window.scrollY > 15);
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const nextScrolled = window.scrollY > 15;
+          if (nextScrolled !== isScrolledRef.current) {
+            isScrolledRef.current = nextScrolled;
+            setIsScrolled(nextScrolled);
+          }
+          ticking = false;
+        });
+        ticking = true;
+      }
     };
+
     window.addEventListener('scroll', handleScroll, { passive: true });
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);

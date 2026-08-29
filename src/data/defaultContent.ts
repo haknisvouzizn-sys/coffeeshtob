@@ -156,7 +156,9 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     subtitle: "Ждем в гости каждый день на набережной левого берега",
     hoursCard: {
       title: "График работы",
+      weekdaysLabel: "Будни (Пн–Пт)",
       weekdaysSchedule: "11:00-20:00",
+      weekendsLabel: "Выходные и праздники",
       weekendsSchedule: "10:00-20:00",
       mainSchedule: "Будни: 11:00-20:00 · Выходные: 10:00-20:00",
       note: "Актуальный график лучше уточнять в наших соцсетях"
@@ -179,11 +181,17 @@ export const DEFAULT_SITE_CONTENT: SiteContent = {
     addressTitle: "ГДЕ МЫ НАХОДИМСЯ",
     address: "Ярославская область, г. Тутаев (левый берег Романов), Волжская набережная, д. 19",
     landmark: "Ориентир: набережная Волги, между лестницей к переправе и Казанским храмом",
+    mapsButtonText: "Открыть на Яндекс.Картах",
+    mapsUrl: "https://yandex.ru/maps/?text=Тутаев+Волжская+набережная+19+Кофештаб",
     navTitle: "НАВИГАЦИЯ",
     socialsTitle: "МЫ НА СВЯЗИ",
+    telegramLabel: "Telegram-канал",
     telegramUrl: "https://t.me/coffeeshtob",
+    vkLabel: "ВКонтакте",
     vkUrl: "https://vk.com/coffeeshtob",
+    guideLabel: "Гид по Романову",
     guideUrl: "https://romanovnavolge.ru/",
-    copyright: "«Кофештаб» · Романов на Волге · Левый берег"
+    copyright: "«Кофештаб» · Романов на Волге · Левый берег",
+    bottomAddress: "Волжская набережная, 19 · Романов"
   }
 };

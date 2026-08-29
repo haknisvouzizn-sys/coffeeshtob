@@ -86,7 +86,9 @@ export interface EventsAndCraftContent {
 
 export interface HoursCardContent {
   title: string;
+  weekdaysLabel?: string;
   weekdaysSchedule: string;
+  weekendsLabel?: string;
   weekendsSchedule: string;
   mainSchedule?: string;
   note: string;
@@ -120,12 +122,18 @@ export interface FooterContent {
   addressTitle: string;
   address: string;
   landmark: string;
+  mapsButtonText?: string;
+  mapsUrl?: string;
   navTitle: string;
   socialsTitle: string;
+  telegramLabel?: string;
   telegramUrl: string;
+  vkLabel?: string;
   vkUrl: string;
+  guideLabel?: string;
   guideUrl: string;
   copyright: string;
+  bottomAddress?: string;
 }
 
 export interface SiteContent {

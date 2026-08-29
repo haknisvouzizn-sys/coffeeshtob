@@ -54,7 +54,9 @@ export const EventsAndCraftSection: React.FC<EventsAndCraftSectionProps> = ({ co
                     <img
                       src={card.image}
                       alt={card.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                      loading="lazy"
+                      decoding="async"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out will-change-transform"
                       referrerPolicy="no-referrer"
                     />
                   </div>
