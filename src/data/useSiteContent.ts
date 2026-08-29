@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { SiteContent } from '../types';
 import { DEFAULT_SITE_CONTENT } from './defaultContent';
 
-const STORAGE_KEY = 'kofeshtab_site_content_v2';
+const STORAGE_KEY = 'kofeshtab_site_content_v3';
 
 export function useSiteContent() {
   const [content, setContent] = useState<SiteContent>(DEFAULT_SITE_CONTENT);
@@ -14,8 +14,12 @@ export function useSiteContent() {
 
     async function loadContent() {
       try {
+        // Clean up legacy cached content versions
+        localStorage.removeItem('kofeshtab_site_content_v1');
+        localStorage.removeItem('kofeshtab_site_content_v2');
+
         // 1. Check local storage for user custom edits
-        const savedLocal = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('kofeshtab_site_content_v1');
+        const savedLocal = localStorage.getItem(STORAGE_KEY);
         if (savedLocal) {
           try {
             const parsed = JSON.parse(savedLocal);
