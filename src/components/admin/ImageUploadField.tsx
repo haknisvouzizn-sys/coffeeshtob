@@ -144,15 +144,15 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         onDragLeave={() => setDragOver(false)}
         onDrop={handleDrop}
         onClick={() => fileInputRef.current?.click()}
-        className={`border-2 border-dashed rounded-xl p-3 text-center transition-all cursor-pointer flex flex-col sm:flex-row items-center justify-between gap-3 ${
+        className={`border border-dashed rounded-xl p-2.5 sm:p-3 text-center transition-all cursor-pointer flex items-center justify-between gap-3 ${
           dragOver
             ? 'border-[#C97D5D] bg-[#F3EBE1]'
             : 'border-[#E0D3C4] hover:border-[#C97D5D] bg-white'
         }`}
       >
-        <div className="flex items-center gap-2.5 text-left">
+        <div className="flex items-center gap-2.5 text-left min-w-0">
           {value ? (
-            <div className="w-12 h-12 rounded-lg overflow-hidden border border-[#E5DACD] bg-[#F6EFE7] shrink-0">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg overflow-hidden border border-[#E5DACD] bg-[#F6EFE7] shrink-0">
               <img
                 src={value}
                 alt="Превью"
@@ -163,23 +163,20 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
               />
             </div>
           ) : (
-            <div className="w-12 h-12 rounded-lg bg-[#FAF7F2] border border-[#E5DACD] flex items-center justify-center shrink-0 text-[#A69284]">
+            <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-lg bg-[#FAF7F2] border border-[#E5DACD] flex items-center justify-center shrink-0 text-[#A69284]">
               <ImageIcon className="w-5 h-5" />
             </div>
           )}
-          <div>
-            <div className="text-xs font-semibold text-[#2D1E16] flex items-center gap-1">
-              <span>Перетащите фото сюда или нажмите для выбора</span>
-            </div>
-            <div className="text-[11px] text-[#8C7465]">
-              Автоматическое сжатие до WebP/JPEG с оптимизацией веса
+          <div className="min-w-0">
+            <div className="text-xs font-semibold text-[#2D1E16] truncate">
+              {value ? 'Нажмите для замены фото' : 'Нажмите для выбора фото'}
             </div>
           </div>
         </div>
 
-        <div className="text-[11px] font-semibold text-[#C97D5D] hover:underline flex items-center gap-1 shrink-0">
+        <div className="text-[11px] font-semibold text-[#C97D5D] flex items-center gap-1 shrink-0">
           <Sparkles className="w-3 h-3" />
-          <span>Выбрать файл</span>
+          <span>Выбрать</span>
         </div>
       </div>
 
