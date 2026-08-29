@@ -130,7 +130,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* Minimalist Top Bar */}
         <div className="bg-[#2D1B12] text-[#FAF7F2] px-5 py-3 flex items-center justify-between border-b border-[#432A1D] shrink-0">
           <div className="flex items-center gap-2">
-            <span className="font-serif font-bold text-base tracking-tight">Кофештаб</span>
+            <span className="font-heading font-bold text-base tracking-tight">Кофештаб</span>
             <span className="text-xs text-[#BC6C3F] font-medium">/ Управление контентом</span>
           </div>
 
@@ -164,7 +164,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <Lock className="w-6 h-6" />
             </div>
 
-            <h3 className="font-serif font-bold text-xl text-[#2C180F] mb-1.5">Вход в панель управления</h3>
+            <h3 className="font-heading font-bold text-xl text-[#2C180F] mb-1.5">Вход в панель управления</h3>
             <p className="text-xs text-[#735A4B] mb-6">Введите пароль администратора для редактирования сайта</p>
 
             <form onSubmit={handleLogin} className="w-full space-y-3.5">
@@ -247,7 +247,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "header" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">Шапка и навигация</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">Шапка и навигация</h4>
                     <p className="text-xs text-[#735A4B]">Название проекта, подзаголовок и социальные сети</p>
                   </div>
 
@@ -353,7 +353,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "hero" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">Главный экран (Hero)</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">Главный экран (Hero)</h4>
                     <p className="text-xs text-[#735A4B]">Главный баннер, заголовок, текст и фоновое фото</p>
                   </div>
 
@@ -379,7 +379,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         ...formData,
                         hero: { ...formData.hero, title: e.target.value }
                       })}
-                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-serif text-sm font-bold"
+                      className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-heading text-sm font-bold"
                     />
                   </div>
 
@@ -442,7 +442,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "about" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">О штабе</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">О штабе</h4>
                     <p className="text-xs text-[#735A4B]">История, концепция купеческого дома и карточки особенностей</p>
                   </div>
 
@@ -468,7 +468,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           ...formData,
                           about: { ...formData.about, title: e.target.value }
                         })}
-                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-serif font-bold"
+                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-heading font-bold"
                       />
                     </div>
                   </div>
@@ -597,7 +597,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "menu" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">Меню Кофештаба</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">Меню Кофештаба</h4>
                     <p className="text-xs text-[#735A4B]">Фирменные угощения, кофе, бутерброды и напитки</p>
                   </div>
 
@@ -611,7 +611,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           ...formData,
                           menu: { ...formData.menu, title: e.target.value }
                         })}
-                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-serif font-bold"
+                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-heading font-bold"
                       />
                     </div>
                     <div>
@@ -793,7 +793,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "eventsAndCraft" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">Жизнь штаба</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">Жизнь штаба</h4>
                     <p className="text-xs text-[#735A4B]">Квартирники, праздники во дворе, диафильмы и 3D-мастерская</p>
                   </div>
 
@@ -807,7 +807,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           ...formData,
                           eventsAndCraft: { ...formData.eventsAndCraft, title: e.target.value }
                         })}
-                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-serif font-bold"
+                        className="w-full px-3.5 py-2 rounded-xl bg-white border border-[#D5C2B1] text-xs outline-none focus:border-[#BC6C3F] text-[#2C180F] font-heading font-bold"
                       />
                     </div>
                     <div>
@@ -909,48 +909,68 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "hoursAndTourists" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">График работы и гостям города</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">График работы и гостям города</h4>
                     <p className="text-xs text-[#735A4B]">Часы открытия, подсказки для туристов и информация о переправе</p>
                   </div>
 
                   {/* Hours Card */}
                   <div className="p-4 bg-white rounded-2xl border border-[#E5D7C9] space-y-3 shadow-xs">
                     <label className="block text-xs font-bold text-[#2C180F]">Блок «График работы»</label>
+                    <div>
+                      <label className="block text-[11px] text-[#8C7465] mb-1">Заголовок блока</label>
+                      <input
+                        type="text"
+                        value={formData.hoursAndTourists.hoursCard.title}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          hoursAndTourists: {
+                            ...formData.hoursAndTourists,
+                            hoursCard: {
+                              ...formData.hoursAndTourists.hoursCard,
+                              title: e.target.value
+                            }
+                          }
+                        })}
+                        className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D5C2B1] text-xs font-semibold"
+                      />
+                    </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1">Заголовок блока</label>
+                        <label className="block text-[11px] text-[#8C7465] mb-1">График в будни (Пн–Пт)</label>
                         <input
                           type="text"
-                          value={formData.hoursAndTourists.hoursCard.title}
+                          value={formData.hoursAndTourists.hoursCard.weekdaysSchedule || ""}
                           onChange={(e) => setFormData({
                             ...formData,
                             hoursAndTourists: {
                               ...formData.hoursAndTourists,
                               hoursCard: {
                                 ...formData.hoursAndTourists.hoursCard,
-                                title: e.target.value
+                                weekdaysSchedule: e.target.value
                               }
                             }
                           })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D5C2B1] text-xs font-semibold"
+                          placeholder="10:00 — 19:00"
+                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D5C2B1] text-xs font-bold text-[#2C180F]"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1">Расписание (часы работы)</label>
+                        <label className="block text-[11px] text-[#8C7465] mb-1">График в выходные и праздники</label>
                         <input
                           type="text"
-                          value={formData.hoursAndTourists.hoursCard.mainSchedule}
+                          value={formData.hoursAndTourists.hoursCard.weekendsSchedule || ""}
                           onChange={(e) => setFormData({
                             ...formData,
                             hoursAndTourists: {
                               ...formData.hoursAndTourists,
                               hoursCard: {
                                 ...formData.hoursAndTourists.hoursCard,
-                                mainSchedule: e.target.value
+                                weekendsSchedule: e.target.value
                               }
                             }
                           })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D5C2B1] text-xs font-bold text-[#2C180F]"
+                          placeholder="09:00 — 20:00"
+                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D5C2B1] text-xs font-bold text-[#C97D5D]"
                         />
                       </div>
                     </div>
@@ -1103,7 +1123,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               {activeTab === "footer" && (
                 <div className="space-y-5">
                   <div className="border-b border-[#E5D7C9] pb-3">
-                    <h4 className="font-serif font-bold text-lg text-[#2C180F]">Подвал и контакты</h4>
+                    <h4 className="font-heading font-bold text-lg text-[#2C180F]">Подвал и контакты</h4>
                     <p className="text-xs text-[#735A4B]">Адрес, ориентиры, ссылки и копирайт внизу сайта</p>
                   </div>
 
@@ -1180,7 +1200,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <div>
-                      <h4 className="font-serif font-bold text-base text-[#2C180F]">Прямой JSON-редактор</h4>
+                      <h4 className="font-heading font-bold text-base text-[#2C180F]">Прямой JSON-редактор</h4>
                       <p className="text-[11px] text-[#735A4B]">Для опытных пользователей и пакетного редактирования</p>
                     </div>
                     <button

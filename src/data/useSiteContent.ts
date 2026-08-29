@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { SiteContent } from '../types';
 import { DEFAULT_SITE_CONTENT } from './defaultContent';
 
-const STORAGE_KEY = 'kofeshtab_site_content_v1';
+const STORAGE_KEY = 'kofeshtab_site_content_v2';
 
 export function useSiteContent() {
   const [content, setContent] = useState<SiteContent>(DEFAULT_SITE_CONTENT);
@@ -15,7 +15,7 @@ export function useSiteContent() {
     async function loadContent() {
       try {
         // 1. Check local storage for user custom edits
-        const savedLocal = localStorage.getItem(STORAGE_KEY);
+        const savedLocal = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('kofeshtab_site_content_v1');
         if (savedLocal) {
           try {
             const parsed = JSON.parse(savedLocal);
@@ -23,6 +23,12 @@ export function useSiteContent() {
               // Ensure no stray admin item is in navItems from previous versions
               const sanitizedNavItems = (parsed.header?.navItems || DEFAULT_SITE_CONTENT.header.navItems).filter(
                 (item: { id: string; label: string }) => item.id !== 'admin' && !item.label.toLowerCase().includes('админ')
+              );
+
+              // Filter out deprecated items like seasonal vzvary from legacy cache
+              const rawDrinks = parsed.menu?.additionalDrinks || DEFAULT_SITE_CONTENT.menu.additionalDrinks;
+              const sanitizedDrinks = rawDrinks.filter(
+                (d: { title: string }) => !d.title.toLowerCase().includes('взвар')
               );
 
               setContent({
@@ -35,7 +41,11 @@ export function useSiteContent() {
                 },
                 hero: { ...DEFAULT_SITE_CONTENT.hero, ...(parsed.hero || {}) },
                 about: { ...DEFAULT_SITE_CONTENT.about, ...(parsed.about || {}) },
-                menu: { ...DEFAULT_SITE_CONTENT.menu, ...(parsed.menu || {}) },
+                menu: { 
+                  ...DEFAULT_SITE_CONTENT.menu, 
+                  ...(parsed.menu || {}),
+                  additionalDrinks: sanitizedDrinks
+                },
                 eventsAndCraft: { ...DEFAULT_SITE_CONTENT.eventsAndCraft, ...(parsed.eventsAndCraft || {}) },
                 hoursAndTourists: { ...DEFAULT_SITE_CONTENT.hoursAndTourists, ...(parsed.hoursAndTourists || {}) },
                 footer: { ...DEFAULT_SITE_CONTENT.footer, ...(parsed.footer || {}) },

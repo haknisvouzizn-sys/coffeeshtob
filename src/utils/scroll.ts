@@ -13,7 +13,8 @@ export function smoothScrollTo(elementId: string, duration = 200, offset = -75) 
   }
 
   const startY = window.scrollY || window.pageYOffset;
-  const targetY = Math.max(0, element.getBoundingClientRect().top + startY + offset);
+  const maxScrollY = Math.max(0, document.documentElement.scrollHeight - window.innerHeight);
+  const targetY = Math.max(0, Math.min(maxScrollY, element.getBoundingClientRect().top + startY + offset));
   const diff = targetY - startY;
 
   if (Math.abs(diff) < 2) return;

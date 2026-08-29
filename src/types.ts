@@ -86,7 +86,9 @@ export interface EventsAndCraftContent {
 
 export interface HoursCardContent {
   title: string;
-  mainSchedule: string;
+  weekdaysSchedule: string;
+  weekendsSchedule: string;
+  mainSchedule?: string;
   note: string;
 }
 
