@@ -14,7 +14,7 @@ const DEFAULT_ADMIN_HASH =
 
 // Corresponds to password: 'owner2025'
 const DEFAULT_OWNER_HASH =
-  'pbkdf2$100000$1dcf3af2e7be6a32309722c1411569ec$092d2ded377a48698c48edfb017888747dcfb8c9c75874cd311b71701d380e4cae1880e58c441ec0159730471e26f406b8e6e849bfe7df1209f69661acb194d8';
+  'pbkdf2$100000$0d5e714f9aa47c520e9722731fe4bdd9$271709ab8f936a12987e7007e240960e914520ad9b08d2b2eafbbd121cacb1c6cb3f9abfa3a76086a7c6f6ef84b916d5fc2fe3a469eb750035e9111369b7426a';
 
 // Secret key for signing session tokens
 export function getSessionSecret(): string {
@@ -214,11 +214,27 @@ export function verifySessionToken(token: string | undefined): SessionPayload | 
   }
 }
 
+export function extractToken(req: Request): string | undefined {
+  if (req.cookies && req.cookies[SESSION_COOKIE_NAME]) {
+    return req.cookies[SESSION_COOKIE_NAME];
+  }
+  const rawCookie = req.headers?.cookie;
+  if (rawCookie) {
+    const match = rawCookie.match(new RegExp(`(?:^|;\\s*)${SESSION_COOKIE_NAME}=([^;]+)`));
+    if (match) return decodeURIComponent(match[1]);
+  }
+  const authHeader = req.headers?.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
+  }
+  return undefined;
+}
+
 /**
  * Middleware to require admin or owner authentication
  */
 export function requireAdminAuth(req: Request, res: Response, next: NextFunction): void {
-  const token = req.cookies?.[SESSION_COOKIE_NAME];
+  const token = extractToken(req);
   const session = verifySessionToken(token);
 
   if (!session || (session.role !== 'admin' && session.role !== 'owner')) {
@@ -234,7 +250,7 @@ export function requireAdminAuth(req: Request, res: Response, next: NextFunction
  * Middleware to require owner (developer) authentication
  */
 export function requireOwnerAuth(req: Request, res: Response, next: NextFunction): void {
-  const token = req.cookies?.[SESSION_COOKIE_NAME];
+  const token = extractToken(req);
   const session = verifySessionToken(token);
 
   if (!session || session.role !== 'owner') {
