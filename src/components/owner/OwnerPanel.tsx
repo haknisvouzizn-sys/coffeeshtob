@@ -13,9 +13,19 @@ import {
   Copy, 
   Check,
   Eye,
-  EyeOff
+  EyeOff,
+  Save,
+  Sliders
 } from 'lucide-react';
-import { loginOwner, logoutAdmin, getOwnerStatus, resetClientPassword, OwnerStatusData } from '../../utils/api';
+import { 
+  loginOwner, 
+  logoutAdmin, 
+  getOwnerStatus, 
+  resetClientPassword, 
+  OwnerStatusData,
+  getStoredGitHubSettings,
+  saveStoredGitHubSettings
+} from '../../utils/api';
 
 interface OwnerPanelProps {
   isOpen: boolean;
@@ -31,6 +41,15 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ isOpen, onClose }) => {
 
   const [statusData, setStatusData] = useState<OwnerStatusData | null>(null);
   const [isLoadingStatus, setIsLoadingStatus] = useState<boolean>(false);
+
+  // GitHub Settings state
+  const [githubSettings, setGithubSettings] = useState<{
+    owner: string;
+    repo: string;
+    branch: string;
+    token: string;
+  }>(getStoredGitHubSettings());
+  const [savedGithubSuccess, setSavedGithubSuccess] = useState<boolean>(false);
 
   // Reset admin password tool state
   const [newAdminPassword, setNewAdminPassword] = useState<string>('');
@@ -111,6 +130,13 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ isOpen, onClose }) => {
     setIsAuthenticated(false);
     setStatusData(null);
     setResetResult(null);
+  };
+
+  const handleSaveGitHubSettings = (e: React.FormEvent) => {
+    e.preventDefault();
+    saveStoredGitHubSettings(githubSettings);
+    setSavedGithubSuccess(true);
+    setTimeout(() => setSavedGithubSuccess(false), 3500);
   };
 
   const handleGeneratePassword = async (generateRandom: boolean) => {
@@ -284,6 +310,87 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ isOpen, onClose }) => {
                 </div>
               </div>
 
+            </div>
+
+            {/* Direct GitHub Integration & Token Card */}
+            <div className="p-4 sm:p-5 rounded-2xl bg-[#261E1A] border border-[#3A2D25] space-y-3.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm font-bold text-[#F4EDE4]">
+                  <Sliders className="w-4 h-4 text-[#E59866]" />
+                  <span>Прямая синхронизация с GitHub (Client & Cloud)</span>
+                </div>
+                {savedGithubSuccess && (
+                  <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    Сохранено!
+                  </span>
+                )}
+              </div>
+
+              <p className="text-xs text-[#A68F7E] leading-relaxed">
+                Укажите токен GitHub (Personal Access Token с правом <code className="text-[#E59866]">repo</code> или <code className="text-[#E59866]">Contents: Read & Write</code>), чтобы публиковать изменения прямо из браузера в репозиторий, даже если бекенд недоступен.
+              </p>
+
+              <form onSubmit={handleSaveGitHubSettings} className="space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#D8C9B9] mb-1">GitHub Owner / User</label>
+                    <input
+                      type="text"
+                      value={githubSettings.owner}
+                      onChange={(e) => setGithubSettings({ ...githubSettings, owner: e.target.value })}
+                      placeholder="webtyr"
+                      className="w-full px-3 py-2 rounded-xl bg-[#1C1714] border border-[#453429] focus:border-[#E59866] text-xs outline-none text-[#F4EDE4] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#D8C9B9] mb-1">Repository Name</label>
+                    <input
+                      type="text"
+                      value={githubSettings.repo}
+                      onChange={(e) => setGithubSettings({ ...githubSettings, repo: e.target.value })}
+                      placeholder="kofeshtab"
+                      className="w-full px-3 py-2 rounded-xl bg-[#1C1714] border border-[#453429] focus:border-[#E59866] text-xs outline-none text-[#F4EDE4] font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-[#D8C9B9] mb-1">Branch</label>
+                    <input
+                      type="text"
+                      value={githubSettings.branch}
+                      onChange={(e) => setGithubSettings({ ...githubSettings, branch: e.target.value })}
+                      placeholder="main"
+                      className="w-full px-3 py-2 rounded-xl bg-[#1C1714] border border-[#453429] focus:border-[#E59866] text-xs outline-none text-[#F4EDE4] font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-[#D8C9B9] mb-1">
+                    Personal Access Token (ghp_... или github_pat_...)
+                  </label>
+                  <input
+                    type="password"
+                    value={githubSettings.token}
+                    onChange={(e) => setGithubSettings({ ...githubSettings, token: e.target.value })}
+                    placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+                    className="w-full px-3 py-2 rounded-xl bg-[#1C1714] border border-[#453429] focus:border-[#E59866] text-xs outline-none text-[#F4EDE4] font-mono"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1">
+                  <span className="text-[11px] text-[#8A7565]">
+                    Токен сохраняется безопасно в вашем браузере
+                  </span>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-[#C97D5D] hover:bg-[#B86846] text-white text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Save className="w-3.5 h-3.5" />
+                    <span>Сохранить настройки GitHub</span>
+                  </button>
+                </div>
+              </form>
             </div>
 
             {/* Admin Password Reset Tool */}

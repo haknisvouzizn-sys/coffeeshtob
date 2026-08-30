@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   Lock, 
   Unlock, 
@@ -25,7 +25,10 @@ import {
   ArrowDown,
   Globe,
   Send,
-  Compass
+  Compass,
+  Download,
+  Upload,
+  FileJson
 } from 'lucide-react';
 import { SiteContent, HighlightCard, AdditionalDrink, FeatureItem, EventOrCraftCard } from '../../types';
 import { loginAdmin, logoutAdmin, checkAdminSession, publishContentToServer } from '../../utils/api';
@@ -46,6 +49,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   content,
   onSave,
   onReset,
+  onExport,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
@@ -62,6 +66,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [publishStatus, setPublishStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [draftSavedMessage, setDraftSavedMessage] = useState<boolean>(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Lock background body scroll while modal is open
   useEffect(() => {
@@ -128,6 +133,34 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     onSave(formData);
     setDraftSavedMessage(true);
     setTimeout(() => setDraftSavedMessage(false), 3000);
+  };
+
+  const handleImportFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const json = JSON.parse(event.target?.result as string);
+        if (json && typeof json === 'object') {
+          setFormData(json);
+          onSave(json);
+          setPublishStatus({
+            type: 'success',
+            message: '✓ Файл content.json успешно загружен и применен!',
+          });
+          setTimeout(() => setPublishStatus(null), 4000);
+        }
+      } catch (err) {
+        setPublishStatus({
+          type: 'error',
+          message: 'Ошибка при чтении JSON-файла. Убедитесь, что это корректный файл content.json.',
+        });
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   const handlePublish = async () => {
@@ -374,7 +407,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   className="w-full py-2 px-3 rounded-xl bg-white border border-[#D5C6B7] hover:bg-[#FAF7F2] text-xs font-semibold text-[#2D1E16] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
                 >
                   <Save className="w-3.5 h-3.5 text-[#8C7465]" />
-                  <span>Сохранить черновик</span>
+                  <span>Сохранить на сайте</span>
                 </button>
 
                 <button
@@ -396,13 +429,64 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   )}
                 </button>
 
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="w-full py-1.5 text-center text-[11px] text-[#8E796D] hover:text-[#2D1E16] transition-colors cursor-pointer"
-                >
-                  Предпросмотр сайта
-                </button>
+                {/* Import / Export JSON tools */}
+                <div className="grid grid-cols-2 gap-1.5 pt-1">
+                  <button
+                    type="button"
+                    onClick={onExport}
+                    className="py-1.5 px-2 rounded-lg bg-[#EFE6DC] hover:bg-[#E5DACD] text-[11px] font-medium text-[#664F40] flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    title="Скачать файл content.json"
+                  >
+                    <Download className="w-3 h-3 text-[#995938]" />
+                    <span>Скачать JSON</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="py-1.5 px-2 rounded-lg bg-[#EFE6DC] hover:bg-[#E5DACD] text-[11px] font-medium text-[#664F40] flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    title="Загрузить файл content.json"
+                  >
+                    <Upload className="w-3 h-3 text-[#995938]" />
+                    <span>Импорт JSON</span>
+                  </button>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".json,application/json"
+                    onChange={handleImportFile}
+                    className="hidden"
+                  />
+                </div>
+
+                <div className="flex items-center justify-between pt-1 text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (confirm("Вы уверены, что хотите сбросить все изменения к исходному состоянию?")) {
+                        onReset();
+                        setFormData(content);
+                        setPublishStatus({
+                          type: 'success',
+                          message: 'Контент сброшен к исходным настройкам!',
+                        });
+                        setTimeout(() => setPublishStatus(null), 3000);
+                      }
+                    }}
+                    className="text-[#995938] hover:text-red-700 transition-colors cursor-pointer flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3 h-3" />
+                    <span>Сбросить всё</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={onClose}
+                    className="text-[#8E796D] hover:text-[#2D1E16] transition-colors cursor-pointer"
+                  >
+                    Предпросмотр
+                  </button>
+                </div>
               </div>
 
             </div>
