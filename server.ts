@@ -1,27 +1,7 @@
 import express from 'express';
 import path from 'path';
-import cookieParser from 'cookie-parser';
 import { createServer as createViteServer } from 'vite';
-import { apiRouter } from './server/routes';
-
-export function createApp() {
-  const app = express();
-
-  // Basic middlewares
-  app.use(express.json({ limit: '25mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '25mb' }));
-  app.use(cookieParser());
-
-  // Mount /api endpoints
-  app.use('/api', apiRouter);
-
-  // Health endpoint
-  app.get('/api/health', (_req, res) => {
-    res.json({ status: 'ok', time: new Date().toISOString() });
-  });
-
-  return app;
-}
+import { createApp } from './server/app';
 
 async function startServer() {
   const app = createApp();
@@ -47,9 +27,11 @@ async function startServer() {
   });
 }
 
-// Start if executed directly
-if (process.env.NODE_ENV !== 'test') {
+// Start if executed directly in Node (not in Vercel Serverless environment or test)
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   startServer().catch((err) => {
     console.error('Failed to start server:', err);
   });
 }
+
+export { createApp };

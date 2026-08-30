@@ -46,11 +46,24 @@ export function resetLoginAttempts(ip: string): void {
   loginAttempts.delete(ip);
 }
 
+const PBKDF2_ITERATIONS = 100000;
+const PBKDF2_KEY_LEN = 64;
+const PBKDF2_DIGEST = 'sha512';
+
 /**
- * Computes SHA-256 hash of a string
+ * Creates a salted PBKDF2 hash of a password string:
+ * Format: pbkdf2$iterations$saltHex$hashHex
  */
-export function sha256(text: string): string {
-  return crypto.createHash('sha256').update(text).digest('hex');
+export function hashPassword(password: string): string {
+  const salt = crypto.randomBytes(16).toString('hex');
+  const derivedKey = crypto.pbkdf2Sync(
+    password.trim(),
+    salt,
+    PBKDF2_ITERATIONS,
+    PBKDF2_KEY_LEN,
+    PBKDF2_DIGEST
+  );
+  return `pbkdf2$${PBKDF2_ITERATIONS}$${salt}$${derivedKey.toString('hex')}`;
 }
 
 // Runtime dynamic password override (if reset by Owner during process lifecycle)
@@ -60,31 +73,66 @@ export function setRuntimeAdminPasswordHash(hash: string): void {
   runtimeAdminPasswordHash = hash;
 }
 
+// Default development fallback PBKDF2 hash (corresponds to password 'kofeshtab2025')
+const DEFAULT_DEV_ADMIN_HASH =
+  'pbkdf2$100000$b43e48e1b2fb93d8addbf1d2d509d959$6f442b37f90f469655b72b6f1f75b64c74b9ab2c857119c93d57e77ff437de146c73b8a8407d17bae6688a5014b940968a489fdc77df19eaad00da457efbf25b';
+
+// Default development fallback PBKDF2 hash (corresponds to password 'owner2025')
+const DEFAULT_DEV_OWNER_HASH =
+  'pbkdf2$100000$1dcf3af2e7be6a32309722c1411569ec$092d2ded377a48698c48edfb017888747dcfb8c9c75874cd311b71701d380e4cae1880e58c441ec0159730471e26f406b8e6e849bfe7df1209f69661acb194d8';
+
 export function getExpectedAdminHash(): string {
   if (runtimeAdminPasswordHash) return runtimeAdminPasswordHash;
   if (process.env.ADMIN_PASSWORD_HASH) return process.env.ADMIN_PASSWORD_HASH.trim();
-  // Default development fallback hash (corresponds to sha256('kofeshtab2025'))
-  return '9db2f51fba04aaecae272e2cf57c9636250785ddf45be04fe606e12e12fa28f4';
+  return DEFAULT_DEV_ADMIN_HASH;
 }
 
 export function getExpectedOwnerHash(): string {
   if (process.env.OWNER_PASSWORD_HASH) return process.env.OWNER_PASSWORD_HASH.trim();
-  // Default owner fallback hash (corresponds to sha256('owner2025'))
-  return '018b1eaef4df3b88b0a996fbe532dfc53ff7df89be9d4a36f6d54cf8e3f9479b';
+  return DEFAULT_DEV_OWNER_HASH;
 }
 
 /**
- * Verify password against expected hash (handles direct plain match for dev fallback or salted/unsalted sha256)
+ * Verifies password against expected PBKDF2 hash with constant-time comparison.
+ * Also supports legacy/plain SHA-256 fallback if user configured a raw hex string.
  */
 export function verifyPassword(password: string, expectedHash: string): boolean {
   if (!password || !expectedHash) return false;
-  
   const trimmed = password.trim();
-  const directHash = sha256(trimmed);
-  const saltedHash = sha256(trimmed + 'kofeshtab_secure_salt_v2025');
 
-  // Support direct sha256, salted sha256, or direct hash match
-  return directHash === expectedHash || saltedHash === expectedHash;
+  // 1. Standard PBKDF2 format check
+  if (expectedHash.startsWith('pbkdf2$')) {
+    const parts = expectedHash.split('$');
+    if (parts.length === 4) {
+      const iterations = parseInt(parts[1], 10) || PBKDF2_ITERATIONS;
+      const salt = parts[2];
+      const targetHashHex = parts[3];
+
+      const derivedKey = crypto.pbkdf2Sync(
+        trimmed,
+        salt,
+        iterations,
+        PBKDF2_KEY_LEN,
+        PBKDF2_DIGEST
+      );
+      const targetBuffer = Buffer.from(targetHashHex, 'hex');
+      if (derivedKey.length === targetBuffer.length) {
+        return crypto.timingSafeEqual(derivedKey, targetBuffer);
+      }
+    }
+  }
+
+  // 2. Legacy fallback support for unsalted or salted SHA-256
+  const sha256Hex = crypto.createHash('sha256').update(trimmed).digest('hex');
+  if (sha256Hex === expectedHash) return true;
+
+  const saltedSha256 = crypto
+    .createHash('sha256')
+    .update(trimmed + 'kofeshtab_secure_salt_v2025')
+    .digest('hex');
+  if (saltedSha256 === expectedHash) return true;
+
+  return false;
 }
 
 export interface SessionPayload {

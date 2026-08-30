@@ -15,7 +15,7 @@ import {
   getExpectedAdminHash,
   getExpectedOwnerHash,
   setRuntimeAdminPasswordHash,
-  sha256,
+  hashPassword,
 } from './auth';
 import {
   commitContentToGitHubServer,
@@ -258,7 +258,7 @@ apiRouter.post('/owner/reset-password', requireOwnerAuth, (req: Request, res: Re
     return;
   }
 
-  const calculatedHash = sha256(targetPassword.trim());
+  const calculatedHash = hashPassword(targetPassword.trim());
   // Set in runtime memory for current server instance
   setRuntimeAdminPasswordHash(calculatedHash);
 
