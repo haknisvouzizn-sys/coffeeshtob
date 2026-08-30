@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Панель управления — Кофештаб (Decap CMS)</title>
+    
+    <!-- Link to config.yml to guarantee explicit discovery -->
+    <link href="/admin/config.yml" type="text/yaml" rel="cms-config-url" />
+
+    <!-- Netlify Identity Widget for authentication (Git Gateway / GitHub) -->
+    <script src="https://identity.netlify.com/v1/netlify-identity-widget.js"></script>
+
+    <style>
+      body {
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        background-color: #FAF7F2;
+        color: #2C180F;
+      }
+      .loading-splash {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        min-height: 80vh;
+        text-align: center;
+        padding: 20px;
+      }
+      .loading-spinner {
+        width: 42px;
+        height: 42px;
+        border: 4px solid #E5D7C9;
+        border-top: 4px solid #BC6C3F;
+        border-radius: 50%;
+        animation: spin 0.9s linear infinite;
+        margin-bottom: 16px;
+      }
+      @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+      }
+      .loading-title {
+        font-size: 20px;
+        font-weight: 700;
+        margin-bottom: 8px;
+        color: #2C180F;
+      }
+      .loading-desc {
+        font-size: 14px;
+        color: #735A4B;
+        max-width: 360px;
+        line-height: 1.5;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Fallback Splash while Decap CMS JS initializes -->
+    <div id="loading-container" class="loading-splash">
+      <div class="loading-spinner"></div>
+      <div class="loading-title">Кофештаб · Панель управления</div>
+      <div class="loading-desc">Загрузка Decap CMS и подключение к системе контента...</div>
+    </div>
+
+    <!-- Decap CMS Core Script -->
+    <script src="https://unpkg.com/decap-cms@^3.0.0/dist/decap-cms.js"></script>
+
+    <!-- Handle Netlify Identity Login & Redirect Events -->
+    <script>
+      // Hide fallback loading splash when CMS mounts
+      window.addEventListener('DOMContentLoaded', function() {
+        var observer = new MutationObserver(function(mutations, obs) {
+          var ncRoot = document.getElementById('nc-root');
+          if (ncRoot && ncRoot.children.length > 0) {
+            var loader = document.getElementById('loading-container');
+            if (loader) loader.style.display = 'none';
+            obs.disconnect();
+          }
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+      });
+
+      // Netlify Identity Login listener
+      if (window.netlifyIdentity) {
+        window.netlifyIdentity.on("init", function(user) {
+          if (!user) {
+            window.netlifyIdentity.on("login", function() {
+              document.location.reload();
+            });
+          }
+        });
+      }
+    </script>
+  </body>
+</html>

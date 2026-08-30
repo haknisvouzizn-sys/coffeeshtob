@@ -7,65 +7,46 @@ import { EventsAndCraftSection } from './components/EventsAndCraftSection';
 import { HoursAndTouristsSection } from './components/HoursAndTouristsSection';
 import { Footer } from './components/Footer';
 import { AdminPanel } from './components/admin/AdminPanel';
-import { OwnerPanel } from './components/owner/OwnerPanel';
 import { smoothScrollTo } from './utils/scroll';
 import { useSiteContent } from './data/useSiteContent';
 
 export const App: React.FC = () => {
   const { content, updateContent, resetToDefault, exportJson } = useSiteContent();
   const [isAdminOpen, setIsAdminOpen] = useState<boolean>(false);
-  const [isOwnerOpen, setIsOwnerOpen] = useState<boolean>(false);
 
-  // Check URL hash or path for /admin or #admin / #owner on mount and route changes
+  // Check URL hash or path for /admin or #admin on mount
   useEffect(() => {
-    const checkRoute = () => {
+    const checkAdminRoute = () => {
       const hash = window.location.hash.toLowerCase();
       const path = window.location.pathname.toLowerCase();
-
-      if (hash === '#owner' || hash === '#/owner' || path.startsWith('/owner')) {
-        setIsOwnerOpen(true);
-        setIsAdminOpen(false);
-      } else if (hash === '#admin' || hash === '#/admin' || path.startsWith('/admin')) {
+      if (hash === '#admin' || hash === '#/admin' || path.startsWith('/admin')) {
         setIsAdminOpen(true);
-        setIsOwnerOpen(false);
       }
     };
 
-    checkRoute();
-    window.addEventListener('hashchange', checkRoute);
+    checkAdminRoute();
+    window.addEventListener('hashchange', checkAdminRoute);
 
-    // Keyboard shortcuts:
-    // Ctrl+Shift+A / Cmd+Shift+A -> Admin Panel
-    // Ctrl+Shift+O / Cmd+Shift+O -> Owner Panel
+    // Keyboard shortcut Ctrl+Shift+A or Cmd+Shift+A to toggle admin
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a') {
         e.preventDefault();
         setIsAdminOpen((prev) => !prev);
-      } else if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'o') {
-        e.preventDefault();
-        setIsOwnerOpen((prev) => !prev);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
 
     return () => {
-      window.removeEventListener('hashchange', checkRoute);
+      window.removeEventListener('hashchange', checkAdminRoute);
       window.removeEventListener('keydown', handleKeyDown);
     };
   }, []);
 
   const handleCloseAdmin = () => {
     setIsAdminOpen(false);
-    if (window.location.hash === '#admin' || window.location.hash === '#/admin' || window.location.pathname.startsWith('/admin')) {
-      window.history.replaceState(null, '', '/');
-    }
-  };
-
-  const handleCloseOwner = () => {
-    setIsOwnerOpen(false);
-    if (window.location.hash === '#owner' || window.location.hash === '#/owner' || window.location.pathname.startsWith('/owner')) {
-      window.history.replaceState(null, '', '/');
+    if (window.location.hash === '#admin' || window.location.hash === '#/admin') {
+      window.history.replaceState(null, '', window.location.pathname);
     }
   };
 
@@ -110,7 +91,7 @@ export const App: React.FC = () => {
         onOpenAdmin={() => setIsAdminOpen(true)}
       />
 
-      {/* Admin Panel (/admin) */}
+      {/* Minimalist Admin Panel */}
       <AdminPanel
         isOpen={isAdminOpen}
         onClose={handleCloseAdmin}
@@ -118,12 +99,6 @@ export const App: React.FC = () => {
         onSave={updateContent}
         onReset={resetToDefault}
         onExport={exportJson}
-      />
-
-      {/* Owner & Developer Panel (/owner) */}
-      <OwnerPanel
-        isOpen={isOwnerOpen}
-        onClose={handleCloseOwner}
       />
     </div>
   );
