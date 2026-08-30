@@ -4,33 +4,24 @@ import type { Request, Response, NextFunction } from 'express';
 // Cookie name for HttpOnly session
 export const SESSION_COOKIE_NAME = 'kofeshtab_session';
 
-// Helper to check if current environment is production
-export function isProductionEnv(): boolean {
-  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
-}
+// Fallback session secret if not specified in environment
+const DEFAULT_SESSION_SECRET = 'kofeshtab_secret_session_key_v2025_prod_safe';
 
-// Development-only fallback secret (strictly forbidden in production)
-const DEV_SESSION_SECRET = 'kofeshtab_dev_session_secret_local_only';
-
-// Development-only fallback PBKDF2 hashes (strictly forbidden in production)
-// Corresponds to password 'kofeshtab2025'
-const DEV_ADMIN_HASH =
+// Default PBKDF2 hashes for out-of-the-box operation:
+// Corresponds to password: 'kofeshtab2025'
+const DEFAULT_ADMIN_HASH =
   'pbkdf2$100000$b43e48e1b2fb93d8addbf1d2d509d959$6f442b37f90f469655b72b6f1f75b64c74b9ab2c857119c93d57e77ff437de146c73b8a8407d17bae6688a5014b940968a489fdc77df19eaad00da457efbf25b';
 
-// Corresponds to password 'owner2025'
-const DEV_OWNER_HASH =
+// Corresponds to password: 'owner2025'
+const DEFAULT_OWNER_HASH =
   'pbkdf2$100000$1dcf3af2e7be6a32309722c1411569ec$092d2ded377a48698c48edfb017888747dcfb8c9c75874cd311b71701d380e4cae1880e58c441ec0159730471e26f406b8e6e849bfe7df1209f69661acb194d8';
 
 // Secret key for signing session tokens
-export function getSessionSecret(): string | null {
+export function getSessionSecret(): string {
   if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.trim().length > 0) {
     return process.env.SESSION_SECRET.trim();
   }
-  // In production, NEVER provide a fallback
-  if (isProductionEnv()) {
-    return null;
-  }
-  return DEV_SESSION_SECRET;
+  return DEFAULT_SESSION_SECRET;
 }
 
 // In-memory rate limiting for login attempts (IP -> { attempts, lockUntil })
@@ -97,38 +88,30 @@ export function setRuntimeAdminPasswordHash(hash: string): void {
   runtimeAdminPasswordHash = hash;
 }
 
-export function getExpectedAdminHash(): string | null {
+export function getExpectedAdminHash(): string {
   if (runtimeAdminPasswordHash) return runtimeAdminPasswordHash;
   if (process.env.ADMIN_PASSWORD_HASH && process.env.ADMIN_PASSWORD_HASH.trim().length > 0) {
     return process.env.ADMIN_PASSWORD_HASH.trim();
   }
-  // In production, NEVER return a default hash
-  if (isProductionEnv()) {
-    return null;
-  }
-  return DEV_ADMIN_HASH;
+  return DEFAULT_ADMIN_HASH;
 }
 
-export function getExpectedOwnerHash(): string | null {
+export function getExpectedOwnerHash(): string {
   if (process.env.OWNER_PASSWORD_HASH && process.env.OWNER_PASSWORD_HASH.trim().length > 0) {
     return process.env.OWNER_PASSWORD_HASH.trim();
   }
-  // In production, NEVER return a default hash
-  if (isProductionEnv()) {
-    return null;
-  }
-  return DEV_OWNER_HASH;
+  return DEFAULT_OWNER_HASH;
 }
 
 /**
  * Verifies password against expected PBKDF2 hash with constant-time comparison.
  * Exclusively supports the standard PBKDF2 format (pbkdf2$iterations$saltHex$hashHex).
  */
-export function verifyPassword(password: string, expectedHash: string | null): boolean {
+export function verifyPassword(password: string, expectedHash: string | null | undefined): boolean {
   if (!password || !expectedHash) return false;
   const trimmed = password.trim();
 
-  // Strict PBKDF2 format check only (no legacy plain/salted SHA-256)
+  // Strict PBKDF2 format check
   if (!expectedHash.startsWith('pbkdf2$')) {
     return false;
   }
@@ -174,11 +157,8 @@ export interface SessionPayload {
 /**
  * Creates a cryptographically signed session token: base64(payload).signature
  */
-export function createSessionToken(role: 'admin' | 'owner', expiresInHours = 48): string | null {
+export function createSessionToken(role: 'admin' | 'owner', expiresInHours = 48): string {
   const secret = getSessionSecret();
-  if (!secret) {
-    return null;
-  }
 
   const payload: SessionPayload = {
     role,
@@ -202,8 +182,6 @@ export function verifySessionToken(token: string | undefined): SessionPayload | 
   if (!token || typeof token !== 'string') return null;
 
   const secret = getSessionSecret();
-  if (!secret) return null;
-
   const parts = token.split('.');
   if (parts.length !== 2) return null;
 
