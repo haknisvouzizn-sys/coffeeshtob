@@ -275,7 +275,7 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ isOpen, onClose }) => {
               </div>
 
               <p className="text-xs text-[#A68F7E] leading-relaxed">
-                Здесь вы можете сгенерировать новый пароль для панели <code className="text-[#E59866]">/admin</code> или задать свой. Новый пароль сразу начнет действовать в текущей сессии сервера, а также будет рассчитан его SHA-256 хеш для добавления в настройки Vercel.
+                Здесь вы можете сгенерировать новый пароль для панели <code className="text-[#E59866]">/admin</code> или задать свой. Новый пароль сразу начнет действовать в текущей сессии сервера, а также будет рассчитан его PBKDF2 (SHA-512) хеш для добавления в переменные окружения Vercel (<code className="text-[#E59866]">ADMIN_PASSWORD_HASH</code>).
               </p>
 
               <div className="flex flex-col sm:flex-row gap-2.5">

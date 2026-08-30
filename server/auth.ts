@@ -4,9 +4,33 @@ import type { Request, Response, NextFunction } from 'express';
 // Cookie name for HttpOnly session
 export const SESSION_COOKIE_NAME = 'kofeshtab_session';
 
+// Helper to check if current environment is production
+export function isProductionEnv(): boolean {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+}
+
+// Development-only fallback secret (strictly forbidden in production)
+const DEV_SESSION_SECRET = 'kofeshtab_dev_session_secret_local_only';
+
+// Development-only fallback PBKDF2 hashes (strictly forbidden in production)
+// Corresponds to password 'kofeshtab2025'
+const DEV_ADMIN_HASH =
+  'pbkdf2$100000$b43e48e1b2fb93d8addbf1d2d509d959$6f442b37f90f469655b72b6f1f75b64c74b9ab2c857119c93d57e77ff437de146c73b8a8407d17bae6688a5014b940968a489fdc77df19eaad00da457efbf25b';
+
+// Corresponds to password 'owner2025'
+const DEV_OWNER_HASH =
+  'pbkdf2$100000$1dcf3af2e7be6a32309722c1411569ec$092d2ded377a48698c48edfb017888747dcfb8c9c75874cd311b71701d380e4cae1880e58c441ec0159730471e26f406b8e6e849bfe7df1209f69661acb194d8';
+
 // Secret key for signing session tokens
-export function getSessionSecret(): string {
-  return process.env.SESSION_SECRET || 'kofeshtab_default_session_secret_change_in_prod';
+export function getSessionSecret(): string | null {
+  if (process.env.SESSION_SECRET && process.env.SESSION_SECRET.trim().length > 0) {
+    return process.env.SESSION_SECRET.trim();
+  }
+  // In production, NEVER provide a fallback
+  if (isProductionEnv()) {
+    return null;
+  }
+  return DEV_SESSION_SECRET;
 }
 
 // In-memory rate limiting for login attempts (IP -> { attempts, lockUntil })
@@ -46,9 +70,9 @@ export function resetLoginAttempts(ip: string): void {
   loginAttempts.delete(ip);
 }
 
-const PBKDF2_ITERATIONS = 100000;
-const PBKDF2_KEY_LEN = 64;
-const PBKDF2_DIGEST = 'sha512';
+export const PBKDF2_ITERATIONS = 100000;
+export const PBKDF2_KEY_LEN = 64;
+export const PBKDF2_DIGEST = 'sha512';
 
 /**
  * Creates a salted PBKDF2 hash of a password string:
@@ -66,71 +90,77 @@ export function hashPassword(password: string): string {
   return `pbkdf2$${PBKDF2_ITERATIONS}$${salt}$${derivedKey.toString('hex')}`;
 }
 
-// Runtime dynamic password override (if reset by Owner during process lifecycle)
+// Runtime dynamic password override (if reset by Owner during current server runtime)
 let runtimeAdminPasswordHash: string | null = null;
 
 export function setRuntimeAdminPasswordHash(hash: string): void {
   runtimeAdminPasswordHash = hash;
 }
 
-// Default development fallback PBKDF2 hash (corresponds to password 'kofeshtab2025')
-const DEFAULT_DEV_ADMIN_HASH =
-  'pbkdf2$100000$b43e48e1b2fb93d8addbf1d2d509d959$6f442b37f90f469655b72b6f1f75b64c74b9ab2c857119c93d57e77ff437de146c73b8a8407d17bae6688a5014b940968a489fdc77df19eaad00da457efbf25b';
-
-// Default development fallback PBKDF2 hash (corresponds to password 'owner2025')
-const DEFAULT_DEV_OWNER_HASH =
-  'pbkdf2$100000$1dcf3af2e7be6a32309722c1411569ec$092d2ded377a48698c48edfb017888747dcfb8c9c75874cd311b71701d380e4cae1880e58c441ec0159730471e26f406b8e6e849bfe7df1209f69661acb194d8';
-
-export function getExpectedAdminHash(): string {
+export function getExpectedAdminHash(): string | null {
   if (runtimeAdminPasswordHash) return runtimeAdminPasswordHash;
-  if (process.env.ADMIN_PASSWORD_HASH) return process.env.ADMIN_PASSWORD_HASH.trim();
-  return DEFAULT_DEV_ADMIN_HASH;
+  if (process.env.ADMIN_PASSWORD_HASH && process.env.ADMIN_PASSWORD_HASH.trim().length > 0) {
+    return process.env.ADMIN_PASSWORD_HASH.trim();
+  }
+  // In production, NEVER return a default hash
+  if (isProductionEnv()) {
+    return null;
+  }
+  return DEV_ADMIN_HASH;
 }
 
-export function getExpectedOwnerHash(): string {
-  if (process.env.OWNER_PASSWORD_HASH) return process.env.OWNER_PASSWORD_HASH.trim();
-  return DEFAULT_DEV_OWNER_HASH;
+export function getExpectedOwnerHash(): string | null {
+  if (process.env.OWNER_PASSWORD_HASH && process.env.OWNER_PASSWORD_HASH.trim().length > 0) {
+    return process.env.OWNER_PASSWORD_HASH.trim();
+  }
+  // In production, NEVER return a default hash
+  if (isProductionEnv()) {
+    return null;
+  }
+  return DEV_OWNER_HASH;
 }
 
 /**
  * Verifies password against expected PBKDF2 hash with constant-time comparison.
- * Also supports legacy/plain SHA-256 fallback if user configured a raw hex string.
+ * Exclusively supports the standard PBKDF2 format (pbkdf2$iterations$saltHex$hashHex).
  */
-export function verifyPassword(password: string, expectedHash: string): boolean {
+export function verifyPassword(password: string, expectedHash: string | null): boolean {
   if (!password || !expectedHash) return false;
   const trimmed = password.trim();
 
-  // 1. Standard PBKDF2 format check
-  if (expectedHash.startsWith('pbkdf2$')) {
-    const parts = expectedHash.split('$');
-    if (parts.length === 4) {
-      const iterations = parseInt(parts[1], 10) || PBKDF2_ITERATIONS;
-      const salt = parts[2];
-      const targetHashHex = parts[3];
-
-      const derivedKey = crypto.pbkdf2Sync(
-        trimmed,
-        salt,
-        iterations,
-        PBKDF2_KEY_LEN,
-        PBKDF2_DIGEST
-      );
-      const targetBuffer = Buffer.from(targetHashHex, 'hex');
-      if (derivedKey.length === targetBuffer.length) {
-        return crypto.timingSafeEqual(derivedKey, targetBuffer);
-      }
-    }
+  // Strict PBKDF2 format check only (no legacy plain/salted SHA-256)
+  if (!expectedHash.startsWith('pbkdf2$')) {
+    return false;
   }
 
-  // 2. Legacy fallback support for unsalted or salted SHA-256
-  const sha256Hex = crypto.createHash('sha256').update(trimmed).digest('hex');
-  if (sha256Hex === expectedHash) return true;
+  const parts = expectedHash.split('$');
+  if (parts.length !== 4) {
+    return false;
+  }
 
-  const saltedSha256 = crypto
-    .createHash('sha256')
-    .update(trimmed + 'kofeshtab_secure_salt_v2025')
-    .digest('hex');
-  if (saltedSha256 === expectedHash) return true;
+  const iterations = parseInt(parts[1], 10) || PBKDF2_ITERATIONS;
+  const salt = parts[2];
+  const targetHashHex = parts[3];
+
+  if (!salt || !targetHashHex) {
+    return false;
+  }
+
+  try {
+    const derivedKey = crypto.pbkdf2Sync(
+      trimmed,
+      salt,
+      iterations,
+      PBKDF2_KEY_LEN,
+      PBKDF2_DIGEST
+    );
+    const targetBuffer = Buffer.from(targetHashHex, 'hex');
+    if (derivedKey.length === targetBuffer.length) {
+      return crypto.timingSafeEqual(derivedKey, targetBuffer);
+    }
+  } catch {
+    return false;
+  }
 
   return false;
 }
@@ -144,7 +174,12 @@ export interface SessionPayload {
 /**
  * Creates a cryptographically signed session token: base64(payload).signature
  */
-export function createSessionToken(role: 'admin' | 'owner', expiresInHours = 48): string {
+export function createSessionToken(role: 'admin' | 'owner', expiresInHours = 48): string | null {
+  const secret = getSessionSecret();
+  if (!secret) {
+    return null;
+  }
+
   const payload: SessionPayload = {
     role,
     userId: role,
@@ -153,7 +188,7 @@ export function createSessionToken(role: 'admin' | 'owner', expiresInHours = 48)
 
   const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
   const signature = crypto
-    .createHmac('sha256', getSessionSecret())
+    .createHmac('sha256', secret)
     .update(payloadStr)
     .digest('base64url');
 
@@ -166,12 +201,15 @@ export function createSessionToken(role: 'admin' | 'owner', expiresInHours = 48)
 export function verifySessionToken(token: string | undefined): SessionPayload | null {
   if (!token || typeof token !== 'string') return null;
 
+  const secret = getSessionSecret();
+  if (!secret) return null;
+
   const parts = token.split('.');
   if (parts.length !== 2) return null;
 
   const [payloadStr, signature] = parts;
   const expectedSignature = crypto
-    .createHmac('sha256', getSessionSecret())
+    .createHmac('sha256', secret)
     .update(payloadStr)
     .digest('base64url');
 
