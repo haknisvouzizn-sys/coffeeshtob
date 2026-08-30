@@ -3,8 +3,7 @@ import {
   Lock, 
   Unlock, 
   Save, 
-  Download, 
-  Upload, 
+  UploadCloud, 
   RotateCcw, 
   X, 
   Check, 
@@ -20,35 +19,16 @@ import {
   MapPin,
   Calendar,
   AlertCircle,
-  GitBranch,
-  GitCommit,
-  ExternalLink,
   CheckCircle2,
   RefreshCw,
-  Shield,
-  KeyRound,
-  ShieldCheck
+  ArrowUp,
+  ArrowDown,
+  Globe,
+  Send,
+  Compass
 } from 'lucide-react';
-import { SiteContent } from '../../types';
-import { 
-  getStoredGitHubConfig, 
-  saveGitHubConfig, 
-  commitContentToGitHub, 
-  testGitHubConnection, 
-  GitHubConfig 
-} from '../../utils/githubSync';
-import { 
-  verifyAdminPassword, 
-  changeAdminPassword, 
-  resetAdminPasswordToDefault, 
-  hasCustomPassword,
-  checkLockout,
-  recordFailedAttempt,
-  resetLockout,
-  setSessionWithExpiry,
-  isSessionValid,
-  clearAdminSession
-} from '../../utils/security';
+import { SiteContent, HighlightCard, AdditionalDrink, FeatureItem, EventOrCraftCard } from '../../types';
+import { loginAdmin, logoutAdmin, checkAdminSession, publishContentToServer } from '../../utils/api';
 import { ImageUploadField } from './ImageUploadField';
 
 interface AdminPanelProps {
@@ -60,259 +40,128 @@ interface AdminPanelProps {
   onExport: () => void;
 }
 
-export const DEFAULT_ADMIN_PASSWORD = "kofeshtab2025";
-const AUTH_STORAGE_KEY = "kofeshtab_admin_authenticated";
-
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
   onClose,
   content,
   onSave,
   onReset,
-  onExport,
 }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [isCheckingAuth, setIsCheckingAuth] = useState<boolean>(true);
   const [passwordInput, setPasswordInput] = useState<string>("");
   const [passwordError, setPasswordError] = useState<string>("");
   const [showPassword, setShowPassword] = useState<boolean>(false);
-  const [activeTab, setActiveTab] = useState<string>("header");
+  const [isLoggingIn, setIsLoggingIn] = useState<boolean>(false);
+
+  const [activeTab, setActiveTab] = useState<string>("menu");
   const [formData, setFormData] = useState<SiteContent>(content);
-  const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
+  
+  // Publish & Draft state
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [publishStatus, setPublishStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [draftSavedMessage, setDraftSavedMessage] = useState<boolean>(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
 
-  // Security & Password change state
-  const [lockout, setLockout] = useState(checkLockout());
-  const [oldPassword, setOldPassword] = useState<string>("");
-  const [newPassword, setNewPassword] = useState<string>("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState<string>("");
-  const [pwdChangeStatus, setPwdChangeStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [isCustomPwdActive, setIsCustomPwdActive] = useState<boolean>(hasCustomPassword());
-  const [showNewPwd, setShowNewPwd] = useState<boolean>(false);
-
-  // GitHub Sync State
-  const [ghConfig, setGhConfig] = useState<GitHubConfig>(getStoredGitHubConfig());
-  const [showGhToken, setShowGhToken] = useState<boolean>(false);
-  const [ghLoading, setGhLoading] = useState<boolean>(false);
-  const [ghStatus, setGhStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string; url?: string } | null>(null);
-
+  // Check server session on open
   useEffect(() => {
     if (isOpen) {
       setFormData(content);
-      setGhConfig(getStoredGitHubConfig());
-      setIsCustomPwdActive(hasCustomPassword());
-      setLockout(checkLockout());
-
-      if (isSessionValid()) {
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-      }
+      setIsCheckingAuth(true);
+      checkAdminSession()
+        .then((status) => {
+          setIsAuthenticated(status.authenticated);
+        })
+        .finally(() => {
+          setIsCheckingAuth(false);
+        });
     }
   }, [isOpen, content]);
 
-  // Lockout countdown timer
-  useEffect(() => {
-    if (!lockout.isLocked) return;
-    const interval = setInterval(() => {
-      const current = checkLockout();
-      setLockout(current);
-      if (!current.isLocked) {
-        clearInterval(interval);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [lockout.isLocked]);
-
-  const handleUpdateGhConfig = (newCfg: Partial<GitHubConfig>) => {
-    const updated = { ...ghConfig, ...newCfg };
-    setGhConfig(updated);
-    saveGitHubConfig(updated);
-  };
-
-  const handleTestGitHub = async () => {
-    setGhLoading(true);
-    setGhStatus(null);
-    try {
-      const res = await testGitHubConnection(ghConfig);
-      setGhStatus({ type: 'success', message: res.message });
-    } catch (err: unknown) {
-      setGhStatus({ type: 'error', message: (err as Error).message });
-    } finally {
-      setGhLoading(false);
-    }
-  };
-
-  const handlePublishToGitHub = async () => {
-    // Also save locally first
-    onSave(formData);
-    setGhLoading(true);
-    setGhStatus(null);
-
-    try {
-      const res = await commitContentToGitHub(formData, ghConfig);
-      setGhStatus({
-        type: 'success',
-        message: res.message,
-        url: res.commitUrl,
-      });
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3000);
-    } catch (err: unknown) {
-      setGhStatus({
-        type: 'error',
-        message: (err as Error).message,
-      });
-    } finally {
-      setGhLoading(false);
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const currentLock = checkLockout();
-    if (currentLock.isLocked) {
-      setPasswordError(`Вход временно заблокирован. Подождите ${currentLock.remainingSeconds} сек.`);
+    if (!passwordInput.trim()) {
+      setPasswordError("Введите пароль");
       return;
     }
 
+    setIsLoggingIn(true);
+    setPasswordError("");
+
     try {
-      const isValid = await verifyAdminPassword(passwordInput);
-      if (isValid) {
-        setIsAuthenticated(true);
-        setSessionWithExpiry(120); // 2 hours session
-        resetLockout();
-        setPasswordError("");
-        setPasswordInput("");
-      } else {
-        const afterFail = recordFailedAttempt();
-        setLockout(afterFail);
-        if (afterFail.isLocked) {
-          setPasswordError(`Слишком много неверных попыток. Вход заблокирован на 2 минуты.`);
-        } else {
-          setPasswordError(`Неверный пароль. Осталось попыток: ${afterFail.attemptsLeft}`);
-        }
-      }
-    } catch (err) {
-      setPasswordError("Ошибка при проверке пароля: " + (err as Error).message);
+      await loginAdmin(passwordInput);
+      setIsAuthenticated(true);
+      setPasswordInput("");
+    } catch (err: any) {
+      setPasswordError(err.message || "Неверный пароль администратора");
+    } finally {
+      setIsLoggingIn(false);
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await logoutAdmin();
     setIsAuthenticated(false);
-    clearAdminSession();
     setPasswordInput("");
   };
 
-  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPwdChangeStatus(null);
+  const handleSaveDraft = () => {
+    onSave(formData);
+    setDraftSavedMessage(true);
+    setTimeout(() => setDraftSavedMessage(false), 3000);
+  };
 
-    if (newPassword.length < 6) {
-      setPwdChangeStatus({ type: 'error', message: 'Новый пароль должен содержать не менее 6 символов.' });
-      return;
-    }
-
-    if (newPassword !== confirmNewPassword) {
-      setPwdChangeStatus({ type: 'error', message: 'Новые пароли не совпадают.' });
-      return;
-    }
-
-    const isOldValid = await verifyAdminPassword(oldPassword);
-    if (!isOldValid) {
-      setPwdChangeStatus({ type: 'error', message: 'Текущий пароль введен неверно.' });
-      return;
-    }
+  const handlePublish = async () => {
+    setIsPublishing(true);
+    setPublishStatus(null);
 
     try {
-      await changeAdminPassword(newPassword);
-      setIsCustomPwdActive(true);
-      setOldPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setPwdChangeStatus({ type: 'success', message: 'Пароль администратора успешно изменен и защищен SHA-256 хешированием!' });
-    } catch (err) {
-      setPwdChangeStatus({ type: 'error', message: (err as Error).message });
+      // 1. Save locally first so user never loses their draft
+      onSave(formData);
+
+      // 2. Publish to server / GitHub
+      const res = await publishContentToServer(formData);
+      setPublishStatus({
+        type: 'success',
+        message: res.message || '✓ Опубликовано успешно!',
+      });
+      setTimeout(() => setPublishStatus(null), 5000);
+    } catch (err: any) {
+      setPublishStatus({
+        type: 'error',
+        message: err.message || 'Не удалось опубликовать изменения. Ваши изменения сохранены локально. Попробуйте ещё раз.',
+      });
+    } finally {
+      setIsPublishing(false);
     }
-  };
-
-  const handleResetPasswordDefault = () => {
-    if (confirm("Вернуть пароль по умолчанию (kofeshtab2025)?")) {
-      resetAdminPasswordToDefault();
-      setIsCustomPwdActive(false);
-      setPwdChangeStatus({ type: 'success', message: 'Пароль сброшен к стандартному (kofeshtab2025).' });
-    }
-  };
-
-  const handleSaveChanges = () => {
-    onSave(formData);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2500);
-  };
-
-  const handleConfirmReset = () => {
-    onReset();
-    setConfirmResetOpen(false);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2500);
-  };
-
-  const handleFileImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const parsed = JSON.parse(event.target?.result as string);
-        if (parsed && typeof parsed === 'object') {
-          setFormData(parsed);
-          onSave(parsed);
-          setSaveSuccess(true);
-          setTimeout(() => setSaveSuccess(false), 2500);
-        }
-      } catch (err) {
-        alert("Ошибка формата JSON файла: " + (err as Error).message);
-      }
-    };
-    reader.readAsText(file);
   };
 
   if (!isOpen) return null;
 
-  const tabs = [
-    { id: "header", label: "Шапка и соцсети", icon: LayoutGrid },
-    { id: "hero", label: "Главный экран", icon: Sparkles },
-    { id: "about", label: "О штабе", icon: FileText },
-    { id: "menu", label: "Меню и напитки", icon: Coffee },
-    { id: "eventsAndCraft", label: "Жизнь штаба", icon: Calendar },
-    { id: "hoursAndTourists", label: "График и гости", icon: Clock },
-    { id: "footer", label: "Подвал и контакты", icon: MapPin },
-    { id: "security", label: "Безопасность и пароль", icon: Shield },
-    { id: "github", label: "Синхронизация с GitHub", icon: GitBranch },
-  ];
-
   return (
-    <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden">
-      <div className="bg-[#FAF7F2] text-[#2C1F16] w-full max-w-5xl h-full sm:h-auto sm:max-h-[90vh] sm:rounded-3xl shadow-2xl border-0 sm:border border-[#E2D4C6] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+    <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 md:p-6 overflow-hidden">
+      <div className="bg-[#FAF7F2] text-[#2C1F16] w-full max-w-5xl h-full sm:h-auto sm:max-h-[92vh] sm:rounded-3xl shadow-2xl border-0 sm:border border-[#E2D4C6] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150">
         
-        {/* Clean Light Top Bar */}
+        {/* Top Header Bar */}
         <div className="bg-[#F6EFE7] text-[#2D1E16] px-4 sm:px-6 py-3 flex items-center justify-between border-b border-[#E5DACD] shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-[#EDE2D5] flex items-center justify-center text-[#C97D5D]">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-[#EDE2D5] flex items-center justify-center text-[#C97D5D]">
               <Coffee className="w-4 h-4" />
             </div>
-            <div className="flex items-baseline gap-1.5">
-              <span className="font-heading font-bold text-sm sm:text-base tracking-tight text-[#2D1E16]">Кофештаб</span>
-              <span className="text-[11px] sm:text-xs text-[#995938] font-medium">Админка</span>
+            <div>
+              <div className="flex items-baseline gap-1.5">
+                <span className="font-heading font-bold text-sm sm:text-base tracking-tight text-[#2D1E16]">Кофештаб</span>
+                <span className="text-[11px] sm:text-xs text-[#995938] font-medium">Админ-панель</span>
+              </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
+          <div className="flex items-center gap-2">
             {isAuthenticated && (
               <button
                 type="button"
                 onClick={handleLogout}
-                className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-xs font-medium text-[#664D3E] transition-colors flex items-center gap-1 cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-xs font-medium text-[#664D3E] transition-colors flex items-center gap-1.5 cursor-pointer"
                 title="Выйти"
               >
                 <Unlock className="w-3.5 h-3.5 text-[#C97D5D]" />
@@ -323,23 +172,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               type="button"
               onClick={onClose}
               className="w-8 h-8 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] flex items-center justify-center transition-colors cursor-pointer"
-              title="Закрыть"
+              title="Закрыть (Предпросмотр)"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Login Screen */}
-        {!isAuthenticated ? (
+        {/* Loading Auth State */}
+        {isCheckingAuth ? (
+          <div className="p-12 flex flex-col items-center justify-center text-center my-auto">
+            <RefreshCw className="w-8 h-8 text-[#C97D5D] animate-spin mb-3" />
+            <p className="text-xs text-[#735A4B]">Проверка авторизации...</p>
+          </div>
+        ) : !isAuthenticated ? (
+          /* Login Screen */
           <div className="p-6 sm:p-12 flex flex-col items-center justify-center text-center max-w-sm mx-auto my-auto w-full">
-            <div className="w-12 h-12 rounded-2xl bg-[#EDE2D5] border border-[#DFCFC0] flex items-center justify-center text-[#C97D5D] mb-3 shadow-xs">
-              <Lock className="w-6 h-6" />
+            <div className="w-14 h-14 rounded-2xl bg-[#EDE2D5] border border-[#DFCFC0] flex items-center justify-center text-[#C97D5D] mb-3.5 shadow-xs">
+              <Lock className="w-7 h-7" />
             </div>
 
-            <h3 className="font-heading font-bold text-lg sm:text-xl text-[#2D1E16] mb-4">Вход в панель управления</h3>
+            <h3 className="font-heading font-bold text-lg sm:text-xl text-[#2D1E16] mb-1">ADMIN</h3>
+            <p className="text-xs text-[#7A6456] mb-5">Управление меню и содержанием сайта</p>
 
-            <form onSubmit={handleLogin} className="w-full space-y-3">
+            <form onSubmit={handleLogin} className="w-full space-y-3.5">
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -359,172 +215,515 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               </div>
 
               {passwordError && (
-                <div className="text-xs text-red-600 font-medium text-left px-1">
+                <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 font-medium text-left">
                   {passwordError}
                 </div>
               )}
 
               <button
                 type="submit"
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs tracking-wide transition-all shadow-xs active:scale-98 cursor-pointer"
+                disabled={isLoggingIn}
+                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs tracking-wide transition-all shadow-xs active:scale-98 cursor-pointer flex items-center justify-center gap-2"
               >
-                Войти
+                {isLoggingIn ? <RefreshCw className="w-4 h-4 animate-spin" /> : null}
+                <span>Войти</span>
               </button>
             </form>
           </div>
         ) : (
-          /* Authenticated Workspace */
+          /* Authenticated Dashboard */
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
             
-            {/* Responsive Tabs (horizontal scroll on mobile, sidebar on md+) */}
-            <div className="w-full md:w-56 bg-[#F3ECE2] border-b md:border-b-0 md:border-r border-[#E5DACD] p-2 md:p-3 flex md:flex-col gap-1 md:gap-1.5 overflow-x-auto shrink-0">
-              {tabs.map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    type="button"
-                    onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-3 py-2 sm:py-2.5 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
-                      isActive
-                        ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
-                        : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
-                    }`}
-                  >
-                    <Icon className={`w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0 ${isActive ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
+            {/* Sidebar Navigation */}
+            <div className="w-full md:w-60 bg-[#F3ECE2] border-b md:border-b-0 md:border-r border-[#E5DACD] p-3 flex md:flex-col justify-between shrink-0 overflow-y-auto">
+              <div className="space-y-4 w-full">
+                
+                {/* Section Group: CONTENT */}
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8E7566] px-3 mb-1.5">
+                    Контент
+                  </div>
+                  <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("menu")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "menu"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <Coffee className={`w-4 h-4 shrink-0 ${activeTab === 'menu' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>Меню</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("hero")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "hero"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <Sparkles className={`w-4 h-4 shrink-0 ${activeTab === 'hero' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>Главный экран</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("about")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "about"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <FileText className={`w-4 h-4 shrink-0 ${activeTab === 'about' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>О штабе</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("events")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "events"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <Calendar className={`w-4 h-4 shrink-0 ${activeTab === 'events' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>Жизнь штаба</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Section Group: BUSINESS */}
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#8E7566] px-3 mb-1.5">
+                    Информация
+                  </div>
+                  <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("hours")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "hours"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <Clock className={`w-4 h-4 shrink-0 ${activeTab === 'hours' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>График и гости</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("contacts")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "contacts"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <MapPin className={`w-4 h-4 shrink-0 ${activeTab === 'contacts' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>Контакты и соцсети</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab("header")}
+                      className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-semibold transition-all text-left whitespace-nowrap cursor-pointer shrink-0 ${
+                        activeTab === "header"
+                          ? "bg-white text-[#B65A2C] shadow-xs border border-[#DFCFC0]"
+                          : "text-[#634E41] hover:bg-[#EBE0D3] hover:text-[#2D1E16]"
+                      }`}
+                    >
+                      <LayoutGrid className={`w-4 h-4 shrink-0 ${activeTab === 'header' ? 'text-[#C97D5D]' : 'text-[#8E7566]'}`} />
+                      <span>Шапка и бренд</span>
+                    </button>
+                  </div>
+                </div>
+
+              </div>
+
+              {/* Actions Footer in Sidebar */}
+              <div className="pt-3 border-t border-[#E5DACD] space-y-2 mt-4">
+                <button
+                  type="button"
+                  onClick={handleSaveDraft}
+                  className="w-full py-2 px-3 rounded-xl bg-white border border-[#D5C6B7] hover:bg-[#FAF7F2] text-xs font-semibold text-[#2D1E16] flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+                >
+                  <Save className="w-3.5 h-3.5 text-[#8C7465]" />
+                  <span>Сохранить черновик</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handlePublish}
+                  disabled={isPublishing}
+                  className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-xs active:scale-98 cursor-pointer disabled:opacity-50"
+                >
+                  {isPublishing ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Публикация...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UploadCloud className="w-4 h-4" />
+                      <span>Опубликовать</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full py-1.5 text-center text-[11px] text-[#8E796D] hover:text-[#2D1E16] transition-colors cursor-pointer"
+                >
+                  Предпросмотр сайта
+                </button>
+              </div>
+
             </div>
 
-            {/* Form Fields Content */}
-            <div className="flex-1 p-3.5 sm:p-5 md:p-6 overflow-y-auto bg-[#FAF7F2] space-y-4 sm:space-y-5">
+            {/* Main Editor Canvas */}
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto bg-[#FAF7F2] space-y-5">
               
-              {/* TAB: HEADER */}
-              {activeTab === "header" && (
-                <div className="space-y-4">
-                  <div className="border-b border-[#E5DACD] pb-2">
-                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Шапка и соцсети</h4>
-                  </div>
+              {/* Status Alert Banners */}
+              {draftSavedMessage && (
+                <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2 animate-in fade-in duration-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span>Черновик успешно сохранен в браузере. Нажмите «Опубликовать», чтобы обновить сайт.</span>
+                </div>
+              )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="bg-white p-3 rounded-2xl border border-[#E5DACD]">
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Название бренда</label>
-                      <input
-                        type="text"
-                        value={formData.header.brandName}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          header: { ...formData.header, brandName: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                    <div className="bg-white p-3 rounded-2xl border border-[#E5DACD]">
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок</label>
-                      <input
-                        type="text"
-                        value={formData.header.brandSubtitle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          header: { ...formData.header, brandSubtitle: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                  </div>
+              {publishStatus && (
+                <div
+                  className={`p-3 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200 ${
+                    publishStatus.type === 'success'
+                      ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
+                      : 'bg-amber-50 border border-amber-200 text-amber-800'
+                  }`}
+                >
+                  {publishStatus.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                  )}
+                  <span>{publishStatus.message}</span>
+                </div>
+              )}
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="bg-white p-3 rounded-2xl border border-[#E5DACD]">
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Кнопка соцсетей</label>
-                      <input
-                        type="text"
-                        value={formData.header.socialsButtonText}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          header: { ...formData.header, socialsButtonText: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                    <div className="bg-white p-3 rounded-2xl border border-[#E5DACD]">
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок окна соцсетей</label>
-                      <input
-                        type="text"
-                        value={formData.header.socialsModalTitle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          header: { ...formData.header, socialsModalTitle: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: MENU EDITOR (Phase 7) */}
+              {/* ------------------------------------------------------------- */}
+              {activeTab === "menu" && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between border-b border-[#E5DACD] pb-3">
+                    <div>
+                      <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Меню кофейни</h4>
+                      <p className="text-xs text-[#7A6456]">Управление главными позициями, напитками и выпечкой</p>
                     </div>
                   </div>
 
-                  {/* Nav items */}
-                  <div className="bg-white p-3.5 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Пункты меню в шапке</label>
-                    <div className="space-y-2">
-                      {formData.header.navItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <span className="text-[11px] text-[#8E796D] w-16 shrink-0 font-mono">#{item.id}</span>
-                          <input
-                            type="text"
-                            value={item.label}
-                            onChange={(e) => {
-                              const newNav = [...formData.header.navItems];
-                              newNav[idx].label = e.target.value;
+                  {/* Section Headings */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок раздела</label>
+                        <input
+                          type="text"
+                          value={formData.menu.title}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            menu: { ...formData.menu, title: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок</label>
+                        <input
+                          type="text"
+                          value={formData.menu.subtitle}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            menu: { ...formData.menu, subtitle: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Плашка о фарфоре</label>
+                      <input
+                        type="text"
+                        value={formData.menu.porcelainBadge}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          menu: { ...formData.menu, porcelainBadge: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* 1. Highlight Cards (with Photos) */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-xs font-bold text-[#2D1E16]">
+                        Главные позиции меню (с фото)
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCard: HighlightCard = {
+                            id: `item_${Date.now()}`,
+                            title: 'Новая позиция',
+                            description: 'Описание напитка или угощения',
+                            image: '/images/photo_2026-08-28_23_24_29_1787998530911.jpg',
+                          };
+                          setFormData({
+                            ...formData,
+                            menu: {
+                              ...formData.menu,
+                              highlightCards: [...formData.menu.highlightCards, newCard],
+                            },
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-xs text-[#C97D5D] hover:text-[#B86846] font-semibold cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить позицию</span>
+                      </button>
+                    </div>
+
+                    <div className="space-y-3">
+                      {formData.menu.highlightCards.map((card, idx) => (
+                        <div key={card.id || idx} className="p-3.5 rounded-xl bg-[#FAF7F2] border border-[#E5DACD] space-y-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2 flex-1">
+                              <span className="text-xs font-bold text-[#8C7465] w-5">{idx + 1}.</span>
+                              <input
+                                type="text"
+                                value={card.title}
+                                onChange={(e) => {
+                                  const updated = [...formData.menu.highlightCards];
+                                  updated[idx].title = e.target.value;
+                                  setFormData({
+                                    ...formData,
+                                    menu: { ...formData.menu, highlightCards: updated },
+                                  });
+                                }}
+                                className="flex-1 px-3 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs font-semibold outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                                placeholder="Название блюда или напитка"
+                              />
+                            </div>
+
+                            {/* Reorder & Delete controls */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                type="button"
+                                disabled={idx === 0}
+                                onClick={() => {
+                                  const updated = [...formData.menu.highlightCards];
+                                  const temp = updated[idx - 1];
+                                  updated[idx - 1] = updated[idx];
+                                  updated[idx] = temp;
+                                  setFormData({
+                                    ...formData,
+                                    menu: { ...formData.menu, highlightCards: updated },
+                                  });
+                                }}
+                                className="p-1 rounded-lg bg-white border border-[#D8C9B9] hover:bg-[#EDE2D5] disabled:opacity-30 text-[#664F40] cursor-pointer"
+                                title="Вверх"
+                              >
+                                <ArrowUp className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                disabled={idx === formData.menu.highlightCards.length - 1}
+                                onClick={() => {
+                                  const updated = [...formData.menu.highlightCards];
+                                  const temp = updated[idx + 1];
+                                  updated[idx + 1] = updated[idx];
+                                  updated[idx] = temp;
+                                  setFormData({
+                                    ...formData,
+                                    menu: { ...formData.menu, highlightCards: updated },
+                                  });
+                                }}
+                                className="p-1 rounded-lg bg-white border border-[#D8C9B9] hover:bg-[#EDE2D5] disabled:opacity-30 text-[#664F40] cursor-pointer"
+                                title="Вниз"
+                              >
+                                <ArrowDown className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const updated = formData.menu.highlightCards.filter((_, i) => i !== idx);
+                                  setFormData({
+                                    ...formData,
+                                    menu: { ...formData.menu, highlightCards: updated },
+                                  });
+                                }}
+                                className="p-1 rounded-lg text-red-500 hover:bg-red-50 border border-transparent transition-colors cursor-pointer"
+                                title="Удалить"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <textarea
+                              rows={2}
+                              value={card.description}
+                              onChange={(e) => {
+                                const updated = [...formData.menu.highlightCards];
+                                updated[idx].description = e.target.value;
+                                setFormData({
+                                  ...formData,
+                                  menu: { ...formData.menu, highlightCards: updated },
+                                });
+                              }}
+                              className="w-full p-2 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                              placeholder="Описание позиции"
+                            />
+                          </div>
+
+                          <ImageUploadField
+                            label="Фотография"
+                            value={card.image}
+                            onChange={(newUrl) => {
+                              const updated = [...formData.menu.highlightCards];
+                              updated[idx].image = newUrl;
                               setFormData({
                                 ...formData,
-                                header: { ...formData.header, navItems: newNav }
+                                menu: { ...formData.menu, highlightCards: updated },
                               });
                             }}
-                            className="flex-1 px-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                           />
                         </div>
                       ))}
                     </div>
                   </div>
 
-                  {/* Social links */}
-                  <div className="bg-white p-3.5 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Ссылки соцсетей</label>
+                  {/* 2. Additional Drinks & Treats List */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <label className="block text-xs font-bold text-[#2D1E16]">
+                          Дополнительные напитки и выпечка
+                        </label>
+                        <p className="text-[11px] text-[#8E796D]">Список согревающих чаев, какао и десертов</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newDrink: AdditionalDrink = {
+                            title: 'Новый напиток',
+                            desc: 'Описание или стоимость',
+                          };
+                          setFormData({
+                            ...formData,
+                            menu: {
+                              ...formData.menu,
+                              additionalDrinks: [...formData.menu.additionalDrinks, newDrink],
+                            },
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 text-xs text-[#C97D5D] hover:text-[#B86846] font-semibold cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Добавить напиток</span>
+                      </button>
+                    </div>
+
                     <div className="space-y-2">
-                      {formData.header.socials.map((soc, idx) => (
-                        <div key={idx} className="p-2.5 bg-[#FAF7F2] rounded-xl border border-[#E5DACD] grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
-                          <div className="sm:col-span-4">
-                            <input
-                              type="text"
-                              placeholder="Название"
-                              value={soc.title}
-                              onChange={(e) => {
-                                const newSocials = [...formData.header.socials];
-                                newSocials[idx].title = e.target.value;
+                      {formData.menu.additionalDrinks.map((drink, idx) => (
+                        <div key={idx} className="p-2.5 rounded-xl bg-[#FAF7F2] border border-[#E5DACD] flex flex-col sm:flex-row items-center gap-2">
+                          <input
+                            type="text"
+                            value={drink.title}
+                            onChange={(e) => {
+                              const updated = [...formData.menu.additionalDrinks];
+                              updated[idx].title = e.target.value;
+                              setFormData({
+                                ...formData,
+                                menu: { ...formData.menu, additionalDrinks: updated },
+                              });
+                            }}
+                            className="w-full sm:w-1/3 px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs font-semibold outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                            placeholder="Название"
+                          />
+                          <input
+                            type="text"
+                            value={drink.desc}
+                            onChange={(e) => {
+                              const updated = [...formData.menu.additionalDrinks];
+                              updated[idx].desc = e.target.value;
+                              setFormData({
+                                ...formData,
+                                menu: { ...formData.menu, additionalDrinks: updated },
+                              });
+                            }}
+                            className="w-full sm:flex-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                            placeholder="Описание или цена"
+                          />
+                          <div className="flex items-center gap-1 self-end sm:self-center">
+                            <button
+                              type="button"
+                              disabled={idx === 0}
+                              onClick={() => {
+                                const updated = [...formData.menu.additionalDrinks];
+                                const temp = updated[idx - 1];
+                                updated[idx - 1] = updated[idx];
+                                updated[idx] = temp;
                                 setFormData({
                                   ...formData,
-                                  header: { ...formData.header, socials: newSocials }
+                                  menu: { ...formData.menu, additionalDrinks: updated },
                                 });
                               }}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
-                            />
-                          </div>
-                          <div className="sm:col-span-8">
-                            <input
-                              type="text"
-                              placeholder="URL ссылка"
-                              value={soc.url}
-                              onChange={(e) => {
-                                const newSocials = [...formData.header.socials];
-                                newSocials[idx].url = e.target.value;
+                              className="p-1 rounded-lg bg-white border border-[#D8C9B9] hover:bg-[#EDE2D5] disabled:opacity-30 text-[#664F40] cursor-pointer"
+                              title="Вверх"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              disabled={idx === formData.menu.additionalDrinks.length - 1}
+                              onClick={() => {
+                                const updated = [...formData.menu.additionalDrinks];
+                                const temp = updated[idx + 1];
+                                updated[idx + 1] = updated[idx];
+                                updated[idx] = temp;
                                 setFormData({
                                   ...formData,
-                                  header: { ...formData.header, socials: newSocials }
+                                  menu: { ...formData.menu, additionalDrinks: updated },
                                 });
                               }}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                            />
+                              className="p-1 rounded-lg bg-white border border-[#D8C9B9] hover:bg-[#EDE2D5] disabled:opacity-30 text-[#664F40] cursor-pointer"
+                              title="Вниз"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const updated = formData.menu.additionalDrinks.filter((_, i) => i !== idx);
+                                setFormData({
+                                  ...formData,
+                                  menu: { ...formData.menu, additionalDrinks: updated },
+                                });
+                              }}
+                              className="p-1 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer"
+                              title="Удалить"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
                           </div>
                         </div>
                       ))}
@@ -533,14 +732,16 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
 
-              {/* TAB: HERO */}
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: HERO (Главный экран) */}
+              {/* ------------------------------------------------------------- */}
               {activeTab === "hero" && (
                 <div className="space-y-4">
                   <div className="border-b border-[#E5DACD] pb-2">
                     <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Главный экран (Hero)</h4>
                   </div>
 
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
                     <div>
                       <label className="block text-xs font-semibold text-[#664F40] mb-1">Плашка адреса и локации</label>
                       <input
@@ -580,7 +781,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-[#664F40] mb-1">Текст первой кнопки</label>
                         <input
@@ -608,55 +809,41 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
 
                     <ImageUploadField
-                      label="Фоновое фото"
+                      label="Фоновая фотография"
                       value={formData.hero.bgImage}
                       onChange={(newUrl) => setFormData({
                         ...formData,
                         hero: { ...formData.hero, bgImage: newUrl }
                       })}
-                      ghConfig={ghConfig}
-                      placeholder="https://... или /images/hero.jpg"
                     />
                   </div>
                 </div>
               )}
 
-              {/* TAB: ABOUT */}
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: ABOUT (О штабе) */}
+              {/* ------------------------------------------------------------- */}
               {activeTab === "about" && (
                 <div className="space-y-4">
                   <div className="border-b border-[#E5DACD] pb-2">
                     <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">О штабе</h4>
                   </div>
 
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Тег секции</label>
-                        <input
-                          type="text"
-                          value={formData.about.sectionTag}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            about: { ...formData.about, sectionTag: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок</label>
-                        <input
-                          type="text"
-                          value={formData.about.title}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            about: { ...formData.about, title: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок раздела</label>
+                      <input
+                        type="text"
+                        value={formData.about.title}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          about: { ...formData.about, title: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                      />
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       <div>
                         <label className="block text-xs font-semibold text-[#664F40] mb-1">Плашка: Город</label>
                         <input
@@ -682,7 +869,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Плашка: Пояснение</label>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Плашка: Подпись</label>
                         <input
                           type="text"
                           value={formData.about.badgeSub}
@@ -702,15 +889,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         ...formData,
                         about: { ...formData.about, image: newUrl }
                       })}
-                      ghConfig={ghConfig}
-                      placeholder="https://... или /images/house.jpg"
                     />
                   </div>
 
-                  {/* Paragraphs */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-2.5">
+                  {/* Paragraphs of history */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
                     <div className="flex items-center justify-between">
-                      <label className="block text-xs font-bold text-[#2D1E16]">Параграфы истории</label>
+                      <label className="block text-xs font-bold text-[#2D1E16]">Абзацы текста истории</label>
                       <button
                         type="button"
                         onClick={() => {
@@ -718,8 +903,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             ...formData,
                             about: {
                               ...formData.about,
-                              paragraphs: [...formData.about.paragraphs, ""]
-                            }
+                              paragraphs: [...formData.about.paragraphs, ""],
+                            },
                           });
                         }}
                         className="inline-flex items-center gap-1 text-xs text-[#C97D5D] hover:text-[#B86846] font-semibold cursor-pointer"
@@ -736,11 +921,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             rows={3}
                             value={p}
                             onChange={(e) => {
-                              const newParas = [...formData.about.paragraphs];
-                              newParas[idx] = e.target.value;
+                              const updated = [...formData.about.paragraphs];
+                              updated[idx] = e.target.value;
                               setFormData({
                                 ...formData,
-                                about: { ...formData.about, paragraphs: newParas }
+                                about: { ...formData.about, paragraphs: updated },
                               });
                             }}
                             className="flex-1 p-2.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] leading-relaxed"
@@ -749,14 +934,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                const newParas = formData.about.paragraphs.filter((_, i) => i !== idx);
+                                const updated = formData.about.paragraphs.filter((_, i) => i !== idx);
                                 setFormData({
                                   ...formData,
-                                  about: { ...formData.about, paragraphs: newParas }
+                                  about: { ...formData.about, paragraphs: updated },
                                 });
                               }}
-                              className="p-2 rounded-xl text-red-500 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                              title="Удалить"
+                              className="p-2 rounded-xl text-red-500 hover:bg-red-50 transition-colors cursor-pointer"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -765,302 +949,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                       ))}
                     </div>
                   </div>
-
-                  {/* Features */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Карточки особенностей</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      {formData.about.features.map((feat, idx) => (
-                        <div key={feat.id} className="p-3 rounded-xl bg-[#FAF7F2] border border-[#E5DACD] space-y-2">
-                          <div>
-                            <input
-                              type="text"
-                              placeholder="Заголовок"
-                              value={feat.title}
-                              onChange={(e) => {
-                                const newFeats = [...formData.about.features];
-                                newFeats[idx].title = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  about: { ...formData.about, features: newFeats }
-                                });
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
-                            />
-                          </div>
-                          <div>
-                            <textarea
-                              rows={2}
-                              placeholder="Описание"
-                              value={feat.description}
-                              onChange={(e) => {
-                                const newFeats = [...formData.about.features];
-                                newFeats[idx].description = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  about: { ...formData.about, features: newFeats }
-                                });
-                              }}
-                              className="w-full p-2 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
                 </div>
               )}
 
-              {/* TAB: MENU */}
-              {activeTab === "menu" && (
-                <div className="space-y-4">
-                  <div className="border-b border-[#E5DACD] pb-2">
-                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Меню и напитки</h4>
-                  </div>
-
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Тег секции</label>
-                        <input
-                          type="text"
-                          value={formData.menu.sectionTag}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            menu: { ...formData.menu, sectionTag: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок меню</label>
-                        <input
-                          type="text"
-                          value={formData.menu.title}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            menu: { ...formData.menu, title: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок меню</label>
-                        <input
-                          type="text"
-                          value={formData.menu.subtitle}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            menu: { ...formData.menu, subtitle: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Бейдж фарфора</label>
-                        <input
-                          type="text"
-                          value={formData.menu.porcelainBadge}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            menu: { ...formData.menu, porcelainBadge: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* 4 Highlight Cards */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                    <label className="block text-xs font-bold text-[#2D1E16]">4 главные карточки угощений</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {formData.menu.highlightCards.map((card, idx) => (
-                        <div key={card.id} className="p-3 rounded-xl bg-[#FAF7F2] border border-[#E5DACD] space-y-2">
-                          <div>
-                            <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Название</label>
-                            <input
-                              type="text"
-                              value={card.title}
-                              onChange={(e) => {
-                                const newCards = [...formData.menu.highlightCards];
-                                newCards[idx].title = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  menu: { ...formData.menu, highlightCards: newCards }
-                                });
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Описание</label>
-                            <textarea
-                              rows={2}
-                              value={card.description}
-                              onChange={(e) => {
-                                const newCards = [...formData.menu.highlightCards];
-                                newCards[idx].description = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  menu: { ...formData.menu, highlightCards: newCards }
-                                });
-                              }}
-                              className="w-full p-2 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                            />
-                          </div>
-                          <ImageUploadField
-                            label="Фото угощения"
-                            value={card.image}
-                            onChange={(newUrl) => {
-                              const newCards = [...formData.menu.highlightCards];
-                              newCards[idx].image = newUrl;
-                              setFormData({
-                                ...formData,
-                                menu: { ...formData.menu, highlightCards: newCards }
-                              });
-                            }}
-                            ghConfig={ghConfig}
-                            placeholder="https://... или /images/dessert.jpg"
-                          />
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Additional drinks */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Тег доп. напитков</label>
-                        <input
-                          type="text"
-                          value={formData.menu.additionalDrinksTag}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            menu: { ...formData.menu, additionalDrinksTag: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок доп. напитков</label>
-                        <input
-                          type="text"
-                          value={formData.menu.additionalDrinksTitle}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            menu: { ...formData.menu, additionalDrinksTitle: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="space-y-2.5">
-                      <div className="flex items-center justify-between">
-                        <label className="block text-xs font-bold text-[#2D1E16]">Позиции напитков</label>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setFormData({
-                              ...formData,
-                              menu: {
-                                ...formData.menu,
-                                additionalDrinks: [...formData.menu.additionalDrinks, { title: "", desc: "" }]
-                              }
-                            });
-                          }}
-                          className="inline-flex items-center gap-1 text-xs text-[#C97D5D] hover:text-[#B86846] font-semibold cursor-pointer"
-                        >
-                          <Plus className="w-3.5 h-3.5" />
-                          <span>Добавить</span>
-                        </button>
-                      </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3">
-                        {formData.menu.additionalDrinks.map((drink, idx) => (
-                          <div key={idx} className="p-2.5 sm:p-3 rounded-xl bg-[#FAF7F2] border border-[#E5DACD] space-y-2 relative">
-                            <div className="flex items-center justify-between">
-                              <input
-                                type="text"
-                                placeholder="Название"
-                                value={drink.title}
-                                onChange={(e) => {
-                                  const newDrinks = [...formData.menu.additionalDrinks];
-                                  newDrinks[idx].title = e.target.value;
-                                  setFormData({
-                                    ...formData,
-                                    menu: { ...formData.menu, additionalDrinks: newDrinks }
-                                  });
-                                }}
-                                className="w-full px-2 py-1 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
-                              />
-                              {formData.menu.additionalDrinks.length > 1 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    const newDrinks = formData.menu.additionalDrinks.filter((_, i) => i !== idx);
-                                    setFormData({
-                                      ...formData,
-                                      menu: { ...formData.menu, additionalDrinks: newDrinks }
-                                    });
-                                  }}
-                                  className="ml-1 p-1 text-red-500 hover:bg-red-50 rounded-md cursor-pointer shrink-0"
-                                  title="Удалить"
-                                >
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                </button>
-                              )}
-                            </div>
-                            <textarea
-                              rows={2}
-                              placeholder="Описание"
-                              value={drink.desc}
-                              onChange={(e) => {
-                                const newDrinks = [...formData.menu.additionalDrinks];
-                                newDrinks[idx].desc = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  menu: { ...formData.menu, additionalDrinks: newDrinks }
-                                });
-                              }}
-                              className="w-full p-2 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                            />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: EVENTS & CRAFT */}
-              {activeTab === "eventsAndCraft" && (
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: EVENTS & CRAFT (Жизнь штаба) */}
+              {/* ------------------------------------------------------------- */}
+              {activeTab === "events" && (
                 <div className="space-y-4">
                   <div className="border-b border-[#E5DACD] pb-2">
                     <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Жизнь штаба</h4>
+                    <p className="text-xs text-[#7A6456]">Квартирники, Квартальники и 3D-мастерская</p>
                   </div>
 
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Тег секции</label>
-                        <input
-                          type="text"
-                          value={formData.eventsAndCraft.sectionTag}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            eventsAndCraft: { ...formData.eventsAndCraft, sectionTag: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок секции</label>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок раздела</label>
                         <input
                           type="text"
                           value={formData.eventsAndCraft.title}
@@ -1071,94 +976,86 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                         />
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок секции</label>
-                      <input
-                        type="text"
-                        value={formData.eventsAndCraft.subtitle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          eventsAndCraft: { ...formData.eventsAndCraft, subtitle: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок</label>
+                        <input
+                          type="text"
+                          value={formData.eventsAndCraft.subtitle}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            eventsAndCraft: { ...formData.eventsAndCraft, subtitle: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  {/* 2 Bento Cards */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="space-y-3">
                     {formData.eventsAndCraft.cards.map((card, idx) => (
-                      <div key={card.id} className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                        <span className="text-xs font-bold text-[#C97D5D] uppercase tracking-wider block">
-                          Карточка {idx + 1}: {card.title}
-                        </span>
-
+                      <div key={card.id || idx} className="p-4 rounded-2xl bg-white border border-[#E5DACD] space-y-3">
                         <div>
-                          <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок</label>
+                          <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок карточки</label>
                           <input
                             type="text"
                             value={card.title}
                             onChange={(e) => {
-                              const newCards = [...formData.eventsAndCraft.cards];
-                              newCards[idx].title = e.target.value;
+                              const updated = [...formData.eventsAndCraft.cards];
+                              updated[idx].title = e.target.value;
                               setFormData({
                                 ...formData,
-                                eventsAndCraft: { ...formData.eventsAndCraft, cards: newCards }
+                                eventsAndCraft: { ...formData.eventsAndCraft, cards: updated }
                               });
                             }}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
+                            className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs font-semibold outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Текст</label>
+                          <label className="block text-xs font-semibold text-[#664F40] mb-1">Описание</label>
                           <textarea
                             rows={3}
                             value={card.description}
                             onChange={(e) => {
-                              const newCards = [...formData.eventsAndCraft.cards];
-                              newCards[idx].description = e.target.value;
+                              const updated = [...formData.eventsAndCraft.cards];
+                              updated[idx].description = e.target.value;
                               setFormData({
                                 ...formData,
-                                eventsAndCraft: { ...formData.eventsAndCraft, cards: newCards }
+                                eventsAndCraft: { ...formData.eventsAndCraft, cards: updated }
                               });
                             }}
-                            className="w-full p-2.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] leading-relaxed"
+                            className="w-full p-2.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Примечание</label>
+                          <label className="block text-xs font-semibold text-[#664F40] mb-1">Примечание</label>
                           <input
                             type="text"
-                            value={card.note || ""}
+                            value={card.note || ''}
                             onChange={(e) => {
-                              const newCards = [...formData.eventsAndCraft.cards];
-                              newCards[idx].note = e.target.value;
+                              const updated = [...formData.eventsAndCraft.cards];
+                              updated[idx].note = e.target.value;
                               setFormData({
                                 ...formData,
-                                eventsAndCraft: { ...formData.eventsAndCraft, cards: newCards }
+                                eventsAndCraft: { ...formData.eventsAndCraft, cards: updated }
                               });
                             }}
-                            className="w-full px-2.5 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                            className="w-full px-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                           />
                         </div>
 
                         <ImageUploadField
-                          label="Фото карточки"
+                          label="Фотография события"
                           value={card.image}
                           onChange={(newUrl) => {
-                            const newCards = [...formData.eventsAndCraft.cards];
-                            newCards[idx].image = newUrl;
+                            const updated = [...formData.eventsAndCraft.cards];
+                            updated[idx].image = newUrl;
                             setFormData({
                               ...formData,
-                              eventsAndCraft: { ...formData.eventsAndCraft, cards: newCards }
+                              eventsAndCraft: { ...formData.eventsAndCraft, cards: updated }
                             });
                           }}
-                          ghConfig={ghConfig}
-                          placeholder="https://... или /images/event.jpg"
                         />
                       </div>
                     ))}
@@ -1166,94 +1063,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
 
-              {/* TAB: HOURS & TOURISTS */}
-              {activeTab === "hoursAndTourists" && (
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: HOURS & TOURISTS (График и информация для гостей) */}
+              {/* ------------------------------------------------------------- */}
+              {activeTab === "hours" && (
                 <div className="space-y-4">
                   <div className="border-b border-[#E5DACD] pb-2">
-                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">График и гости</h4>
-                  </div>
-
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Тег секции</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.sectionTag}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: { ...formData.hoursAndTourists, sectionTag: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок секции</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.title}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: { ...formData.hoursAndTourists, title: e.target.value }
-                          })}
-                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок секции</label>
-                      <input
-                        type="text"
-                        value={formData.hoursAndTourists.subtitle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          hoursAndTourists: { ...formData.hoursAndTourists, subtitle: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
+                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">График работы и информация для гостей</h4>
                   </div>
 
                   {/* Hours Card */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3">
-                    <label className="block text-xs font-bold text-[#2D1E16]">График работы</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-[#C97D5D]">График работы</h5>
+                    
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок карточки</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.hoursCard.title}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: {
-                              ...formData.hoursAndTourists,
-                              hoursCard: { ...formData.hoursAndTourists.hoursCard, title: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Подпись для будней</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.hoursCard.weekdaysLabel || "Будни (Пн–Пт)"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: {
-                              ...formData.hoursAndTourists,
-                              hoursCard: { ...formData.hoursAndTourists.hoursCard, weekdaysLabel: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Часы работы в будни</label>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Будни (расписание)</label>
                         <input
                           type="text"
                           value={formData.hoursAndTourists.hoursCard.weekdaysSchedule}
@@ -1261,32 +1086,19 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             ...formData,
                             hoursAndTourists: {
                               ...formData.hoursAndTourists,
-                              hoursCard: { ...formData.hoursAndTourists.hoursCard, weekdaysSchedule: e.target.value }
-                            }
+                              hoursCard: {
+                                ...formData.hoursAndTourists.hoursCard,
+                                weekdaysSchedule: e.target.value,
+                              },
+                            },
                           })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-bold"
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                          placeholder="11:00-20:00"
                         />
                       </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Подпись для выходных</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.hoursCard.weekendsLabel || "Выходные и праздники"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: {
-                              ...formData.hoursAndTourists,
-                              hoursCard: { ...formData.hoursAndTourists.hoursCard, weekendsLabel: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                       <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Часы работы в выходные</label>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Выходные (расписание)</label>
                         <input
                           type="text"
                           value={formData.hoursAndTourists.hoursCard.weekendsSchedule}
@@ -1294,68 +1106,43 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             ...formData,
                             hoursAndTourists: {
                               ...formData.hoursAndTourists,
-                              hoursCard: { ...formData.hoursAndTourists.hoursCard, weekendsSchedule: e.target.value }
-                            }
+                              hoursCard: {
+                                ...formData.hoursAndTourists.hoursCard,
+                                weekendsSchedule: e.target.value,
+                              },
+                            },
                           })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-bold"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Примечание к графику</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.hoursCard.note}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: {
-                              ...formData.hoursAndTourists,
-                              hoursCard: { ...formData.hoursAndTourists.hoursCard, note: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Tourists Card */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Карточка «Гостям города»</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.touristsCard.title}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: {
-                              ...formData.hoursAndTourists,
-                              touristsCard: { ...formData.hoursAndTourists.touristsCard, title: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Текст кнопки перехода</label>
-                        <input
-                          type="text"
-                          value={formData.hoursAndTourists.touristsCard.buttonText}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            hoursAndTourists: {
-                              ...formData.hoursAndTourists,
-                              touristsCard: { ...formData.hoursAndTourists.touristsCard, buttonText: e.target.value }
-                            }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                          placeholder="10:00-20:00"
                         />
                       </div>
                     </div>
 
                     <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Текст описания</label>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Примечание дежурных</label>
+                      <input
+                        type="text"
+                        value={formData.hoursAndTourists.hoursCard.note}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          hoursAndTourists: {
+                            ...formData.hoursAndTourists,
+                            hoursCard: {
+                              ...formData.hoursAndTourists.hoursCard,
+                              note: e.target.value,
+                            },
+                          },
+                        })}
+                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Tourists Portal */}
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <h5 className="text-xs font-bold uppercase tracking-wider text-[#C97D5D]">Гостям города</h5>
+                    <div>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Описание для туристов</label>
                       <textarea
                         rows={3}
                         value={formData.hoursAndTourists.touristsCard.description}
@@ -1363,84 +1150,156 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                           ...formData,
                           hoursAndTourists: {
                             ...formData.hoursAndTourists,
-                            touristsCard: { ...formData.hoursAndTourists.touristsCard, description: e.target.value }
-                          }
+                            touristsCard: {
+                              ...formData.hoursAndTourists.touristsCard,
+                              description: e.target.value,
+                            },
+                          },
                         })}
-                        className="w-full p-2.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] leading-relaxed"
+                        className="w-full p-2.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                       />
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Ссылка (URL гида)</label>
-                      <input
-                        type="text"
-                        value={formData.hoursAndTourists.touristsCard.buttonUrl}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          hoursAndTourists: {
-                            ...formData.hoursAndTourists,
-                            touristsCard: { ...formData.hoursAndTourists.touristsCard, buttonUrl: e.target.value }
-                          }
-                        })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Crossing banner */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Баннер переправы</label>
-                    <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок</label>
-                      <input
-                        type="text"
-                        value={formData.hoursAndTourists.crossingBanner.title}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          hoursAndTourists: {
-                            ...formData.hoursAndTourists,
-                            crossingBanner: { ...formData.hoursAndTourists.crossingBanner, title: e.target.value }
-                          }
-                        })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Описание переправы</label>
-                      <textarea
-                        rows={2}
-                        value={formData.hoursAndTourists.crossingBanner.description}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          hoursAndTourists: {
-                            ...formData.hoursAndTourists,
-                            crossingBanner: { ...formData.hoursAndTourists.crossingBanner, description: e.target.value }
-                          }
-                        })}
-                        className="w-full p-2.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Текст кнопки гида</label>
+                        <input
+                          type="text"
+                          value={formData.hoursAndTourists.touristsCard.buttonText}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            hoursAndTourists: {
+                              ...formData.hoursAndTourists,
+                              touristsCard: {
+                                ...formData.hoursAndTourists.touristsCard,
+                                buttonText: e.target.value,
+                              },
+                            },
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Ссылка на гид (URL)</label>
+                        <input
+                          type="text"
+                          value={formData.hoursAndTourists.touristsCard.buttonUrl}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            hoursAndTourists: {
+                              ...formData.hoursAndTourists,
+                              touristsCard: {
+                                ...formData.hoursAndTourists.touristsCard,
+                                buttonUrl: e.target.value,
+                              },
+                            },
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* TAB: FOOTER */}
-              {activeTab === "footer" && (
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: CONTACTS & FOOTER */}
+              {/* ------------------------------------------------------------- */}
+              {activeTab === "contacts" && (
                 <div className="space-y-4">
                   <div className="border-b border-[#E5DACD] pb-2">
-                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Подвал и контакты</h4>
+                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Контакты и соцсети</h4>
                   </div>
 
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3.5">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <div>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Адрес</label>
+                      <input
+                        type="text"
+                        value={formData.footer.address}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          footer: { ...formData.footer, address: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Ориентир на местности</label>
+                      <input
+                        type="text"
+                        value={formData.footer.landmark}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          footer: { ...formData.footer, landmark: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Ссылка на Яндекс.Карты</label>
+                      <input
+                        type="text"
+                        value={formData.footer.mapsUrl || ''}
+                        onChange={(e) => setFormData({
+                          ...formData,
+                          footer: { ...formData.footer, mapsUrl: e.target.value }
+                        })}
+                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">Telegram-канал (URL)</label>
+                        <input
+                          type="text"
+                          value={formData.footer.telegramUrl}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            footer: { ...formData.footer, telegramUrl: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-[#664F40] mb-1">ВКонтакте (URL)</label>
+                        <input
+                          type="text"
+                          value={formData.footer.vkUrl}
+                          onChange={(e) => setFormData({
+                            ...formData,
+                            footer: { ...formData.footer, vkUrl: e.target.value }
+                          })}
+                          className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ------------------------------------------------------------- */}
+              {/* TAB: HEADER & BRAND */}
+              {/* ------------------------------------------------------------- */}
+              {activeTab === "header" && (
+                <div className="space-y-4">
+                  <div className="border-b border-[#E5DACD] pb-2">
+                    <h4 className="font-heading font-bold text-base sm:text-lg text-[#2D1E16]">Шапка и название бренда</h4>
+                  </div>
+
+                  <div className="bg-white p-4 rounded-2xl border border-[#E5DACD] space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-semibold text-[#664F40] mb-1">Название бренда</label>
                         <input
                           type="text"
-                          value={formData.footer.brandName}
+                          value={formData.header.brandName}
                           onChange={(e) => setFormData({
                             ...formData,
-                            footer: { ...formData.footer, brandName: e.target.value }
+                            header: { ...formData.header, brandName: e.target.value }
                           })}
                           className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                         />
@@ -1449,556 +1308,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         <label className="block text-xs font-semibold text-[#664F40] mb-1">Подзаголовок</label>
                         <input
                           type="text"
-                          value={formData.footer.brandSubtitle}
+                          value={formData.header.brandSubtitle}
                           onChange={(e) => setFormData({
                             ...formData,
-                            footer: { ...formData.footer, brandSubtitle: e.target.value }
+                            header: { ...formData.header, brandSubtitle: e.target.value }
                           })}
                           className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                         />
                       </div>
                     </div>
-
-                    <div>
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Краткое описание</label>
-                      <textarea
-                        rows={2}
-                        value={formData.footer.description}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          footer: { ...formData.footer, description: e.target.value }
-                        })}
-                        className="w-full p-2.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Address info */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Адрес и карты</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок адреса</label>
-                        <input
-                          type="text"
-                          value={formData.footer.addressTitle}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, addressTitle: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Текст кнопки карт</label>
-                        <input
-                          type="text"
-                          value={formData.footer.mapsButtonText || "Открыть на Яндекс.Картах"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, mapsButtonText: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Полный адрес</label>
-                      <input
-                        type="text"
-                        value={formData.footer.address}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          footer: { ...formData.footer, address: e.target.value }
-                        })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Ориентир</label>
-                      <input
-                        type="text"
-                        value={formData.footer.landmark}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          footer: { ...formData.footer, landmark: e.target.value }
-                        })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Ссылка на Яндекс.Карты (URL)</label>
-                      <input
-                        type="text"
-                        value={formData.footer.mapsUrl || ""}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          footer: { ...formData.footer, mapsUrl: e.target.value }
-                        })}
-                        className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Navigation and Socials titles */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Ссылки и соцсети</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок меню</label>
-                        <input
-                          type="text"
-                          value={formData.footer.navTitle}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, navTitle: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Заголовок соцсетей</label>
-                        <input
-                          type="text"
-                          value={formData.footer.socialsTitle}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, socialsTitle: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Подпись Telegram</label>
-                        <input
-                          type="text"
-                          value={formData.footer.telegramLabel || "Telegram-канал"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, telegramLabel: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Ссылка Telegram (URL)</label>
-                        <input
-                          type="text"
-                          value={formData.footer.telegramUrl}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, telegramUrl: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Подпись ВКонтакте</label>
-                        <input
-                          type="text"
-                          value={formData.footer.vkLabel || "ВКонтакте"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, vkLabel: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Ссылка ВКонтакте (URL)</label>
-                        <input
-                          type="text"
-                          value={formData.footer.vkUrl}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, vkUrl: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Подпись Гида</label>
-                        <input
-                          type="text"
-                          value={formData.footer.guideLabel || "Гид по Романову"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, guideLabel: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Ссылка на Гид (URL)</label>
-                        <input
-                          type="text"
-                          value={formData.footer.guideUrl}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, guideUrl: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Copyright and bottom text */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-3">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Копирайт</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Текст копирайта</label>
-                        <input
-                          type="text"
-                          value={formData.footer.copyright}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, copyright: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">Адрес в нижнем углу</label>
-                        <input
-                          type="text"
-                          value={formData.footer.bottomAddress || "Волжская набережная, 19 · Романов"}
-                          onChange={(e) => setFormData({
-                            ...formData,
-                            footer: { ...formData.footer, bottomAddress: e.target.value }
-                          })}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: SECURITY & PASSWORD */}
-              {activeTab === "security" && (
-                <div className="space-y-4">
-                  <div className="border-b border-[#E5DACD] pb-2">
-                    <h4 className="font-heading font-bold text-base text-[#2D1E16] flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-[#C97D5D]" />
-                      <span>Безопасность и пароль</span>
-                    </h4>
-                  </div>
-
-                  {/* Security Highlights */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="p-3 bg-white rounded-xl border border-[#E5DACD] space-y-1">
-                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
-                        <KeyRound className="w-3.5 h-3.5" />
-                        <span className="text-xs font-bold text-[#2D1E16]">Пароль</span>
-                      </div>
-                      <p className="text-xs font-semibold">
-                        {isCustomPwdActive ? (
-                          <span className="text-emerald-700">✓ Личный пароль (SHA-256)</span>
-                        ) : (
-                          <span className="text-amber-700">Стандартный</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-xl border border-[#E5DACD] space-y-1">
-                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
-                        <Shield className="w-3.5 h-3.5" />
-                        <span className="text-xs font-bold text-[#2D1E16]">Anti-Brute Force</span>
-                      </div>
-                      <p className="text-xs font-semibold text-emerald-700">
-                        Активна (5 попыток)
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-xl border border-[#E5DACD] space-y-1">
-                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span className="text-xs font-bold text-[#2D1E16]">Сессия</span>
-                      </div>
-                      <p className="text-xs font-semibold text-emerald-700">
-                        2 часа
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Password Change Form */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#E5DACD] space-y-3">
-                    <h5 className="font-heading font-bold text-xs text-[#2D1E16] flex items-center gap-1.5">
-                      <KeyRound className="w-3.5 h-3.5 text-[#C97D5D]" />
-                      <span>Изменить пароль</span>
-                    </h5>
-
-                    <form onSubmit={handleChangePasswordSubmit} className="space-y-3 max-w-md">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Текущий пароль
-                        </label>
-                        <input
-                          type={showNewPwd ? "text" : "password"}
-                          value={oldPassword}
-                          onChange={(e) => setOldPassword(e.target.value)}
-                          placeholder="Старый пароль"
-                          required
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Новый пароль (от 6 символов)
-                        </label>
-                        <input
-                          type={showNewPwd ? "text" : "password"}
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Новый пароль"
-                          required
-                          minLength={6}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Подтверждение нового пароля
-                        </label>
-                        <input
-                          type={showNewPwd ? "text" : "password"}
-                          value={confirmNewPassword}
-                          onChange={(e) => setConfirmNewPassword(e.target.value)}
-                          placeholder="Повторите новый пароль"
-                          required
-                          minLength={6}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPwd(!showNewPwd)}
-                          className="text-[11px] text-[#8E796D] hover:text-[#2D1E16] flex items-center gap-1.5 cursor-pointer py-0.5"
-                        >
-                          {showNewPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          <span>{showNewPwd ? "Скрыть пароли" : "Показать пароли"}</span>
-                        </button>
-                      </div>
-
-                      {pwdChangeStatus && (
-                        <div
-                          className={`p-2.5 rounded-lg text-xs flex items-start gap-2 animate-in fade-in duration-150 ${
-                            pwdChangeStatus.type === 'success'
-                              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                              : 'bg-red-50 border border-red-200 text-red-700'
-                          }`}
-                        >
-                          {pwdChangeStatus.type === 'success' ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                          ) : (
-                            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                          )}
-                          <span>{pwdChangeStatus.message}</span>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>Сохранить пароль</span>
-                        </button>
-
-                        {isCustomPwdActive && (
-                          <button
-                            type="button"
-                            onClick={handleResetPasswordDefault}
-                            className="px-3 py-1.5 rounded-lg bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-medium transition-colors cursor-pointer"
-                          >
-                            Сбросить к стандартному
-                          </button>
-                        )}
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* Public URL and access shortcut */}
-                  <div className="bg-[#FAF7F2] p-3 rounded-xl border border-[#E5DACD] text-xs text-[#664D3E] flex flex-wrap items-center justify-between gap-2">
-                    <span>Быстрый вход: <strong>Ctrl + Shift + A</strong> (или <strong>/admin</strong> в URL)</span>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: GITHUB SYNC */}
-              {activeTab === "github" && (
-                <div className="space-y-4">
-                  <div className="border-b border-[#E5DACD] pb-2">
-                    <div className="flex items-center gap-2">
-                      <GitBranch className="w-4 h-4 text-[#C97D5D]" />
-                      <h4 className="font-heading font-bold text-base text-[#2D1E16]">Синхронизация с GitHub</h4>
-                    </div>
-                  </div>
-
-                  {/* Repository Settings */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#E5DACD] space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Владелец / Логин (Owner)
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.owner}
-                          onChange={(e) => handleUpdateGhConfig({ owner: e.target.value })}
-                          placeholder="например: tryphonbrooks"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Репозиторий (Repo)
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.repo}
-                          onChange={(e) => handleUpdateGhConfig({ repo: e.target.value })}
-                          placeholder="например: kofeshtab"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Ветка (Branch)
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.branch}
-                          onChange={(e) => handleUpdateGhConfig({ branch: e.target.value })}
-                          placeholder="main"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Путь к файлу контента
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.filePath}
-                          onChange={(e) => handleUpdateGhConfig({ filePath: e.target.value })}
-                          placeholder="public/content.json"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-                    </div>
-
-                    {/* GitHub Personal Access Token */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] text-[#8C7465] font-medium">
-                          GitHub Token (PAT)
-                        </label>
-                        <a
-                          href="https://github.com/settings/tokens/new?scopes=repo&description=KofeshtabAdmin"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-[#C97D5D] hover:underline flex items-center gap-1 font-medium"
-                        >
-                          <span>Создать токен</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                      <div className="relative">
-                        <input
-                          type={showGhToken ? "text" : "password"}
-                          value={ghConfig.token}
-                          onChange={(e) => handleUpdateGhConfig({ token: e.target.value })}
-                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-mono pr-9"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowGhToken(!showGhToken)}
-                          className="absolute right-2.5 top-2 text-[#9E8A7D] hover:text-[#2D1E16] cursor-pointer"
-                          title={showGhToken ? "Скрыть токен" : "Показать токен"}
-                        >
-                          {showGhToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Status Message */}
-                    {ghStatus && (
-                      <div 
-                        className={`p-3 rounded-lg text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
-                          ghStatus.type === 'success' 
-                            ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
-                            : 'bg-red-50 border border-red-200 text-red-700'
-                        }`}
-                      >
-                        {ghStatus.type === 'success' ? (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                        ) : (
-                          <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                        )}
-                        <div className="flex-1 space-y-1">
-                          <div className="font-medium">{ghStatus.message}</div>
-                          {ghStatus.url && (
-                            <a 
-                              href={ghStatus.url} 
-                              target="_blank" 
-                              rel="noopener noreferrer"
-                              className="text-emerald-700 underline font-semibold flex items-center gap-1 hover:text-emerald-900 mt-1"
-                            >
-                              <span>Открыть коммит на GitHub</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Action buttons inside Tab */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
-                      <button
-                        type="button"
-                        onClick={handleTestGitHub}
-                        disabled={ghLoading || !ghConfig.token || !ghConfig.owner || !ghConfig.repo}
-                        className="px-3.5 py-1.5 rounded-lg bg-[#EDE2D5] hover:bg-[#E4D7C9] disabled:opacity-50 disabled:cursor-not-allowed text-[#664D3E] text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        {ghLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5 text-[#C97D5D]" />}
-                        <span>Проверить</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={handlePublishToGitHub}
-                        disabled={ghLoading || !ghConfig.token || !ghConfig.owner || !ghConfig.repo}
-                        className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
-                      >
-                        {ghLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GitCommit className="w-3.5 h-3.5" />}
-                        <span>Опубликовать на GitHub</span>
-                      </button>
-                    </div>
-
                   </div>
                 </div>
               )}
@@ -2006,125 +1324,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
         )}
-
-        {/* Clean Light Bottom Action Bar */}
-        {isAuthenticated && (
-          <div className="bg-[#F6EFE7] px-5 sm:px-6 py-3.5 border-t border-[#E5DACD] flex flex-wrap items-center justify-between gap-3 shrink-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <button
-                type="button"
-                onClick={handleSaveChanges}
-                className="px-4 sm:px-5 py-2 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
-              >
-                <Save className="w-4 h-4" />
-                <span>Сохранить локально</span>
-              </button>
-
-              {/* Quick Publish to GitHub button */}
-              <button
-                type="button"
-                onClick={handlePublishToGitHub}
-                disabled={ghLoading}
-                className="px-3.5 sm:px-4 py-2 rounded-xl bg-[#24292F] hover:bg-[#1B1F23] disabled:opacity-50 text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
-                title="Отправить коммит с обновлениями в репозиторий GitHub"
-              >
-                {ghLoading ? (
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                ) : (
-                  <GitCommit className="w-3.5 h-3.5 text-[#E09D77]" />
-                )}
-                <span>На GitHub</span>
-              </button>
-
-              {saveSuccess && (
-                <div className="flex items-center gap-1.5 text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl font-medium animate-in fade-in duration-150">
-                  <Check className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Сохранено!</span>
-                </div>
-              )}
-            </div>
-
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* Reset button */}
-              <button
-                type="button"
-                onClick={() => setConfirmResetOpen(true)}
-                className="px-3 py-2 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                title="Сбросить все тексты к исходным"
-              >
-                <RotateCcw className="w-3.5 h-3.5 text-[#8E7566]" />
-                <span className="hidden sm:inline">Сброс</span>
-              </button>
-
-              {/* Export backup JSON */}
-              <button
-                type="button"
-                onClick={onExport}
-                className="px-3 py-2 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                title="Скачать файл резервной копии контента"
-              >
-                <Download className="w-3.5 h-3.5 text-[#8E7566]" />
-                <span className="hidden sm:inline">Скачать JSON</span>
-              </button>
-
-              {/* Import backup JSON */}
-              <label 
-                className="px-3 py-2 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer"
-                title="Загрузить файл контента из резервной копии"
-              >
-                <Upload className="w-3.5 h-3.5 text-[#8E7566]" />
-                <span className="hidden sm:inline">Загрузить JSON</span>
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  onChange={handleFileImport}
-                  className="hidden"
-                />
-              </label>
-
-              {/* Close */}
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-3.5 py-2 rounded-xl bg-white hover:bg-[#F2E8DC] border border-[#D8C9B9] text-[#553E31] text-xs font-semibold transition-colors cursor-pointer"
-              >
-                Закрыть
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Confirmation Modal for Reset */}
-        {confirmResetOpen && (
-          <div className="fixed inset-0 z-60 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-[#FAF7F2] rounded-2xl p-5 sm:p-6 border border-[#E5DACD] max-w-sm w-full shadow-2xl text-center space-y-4 animate-in fade-in zoom-in-95 duration-150">
-              <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 mx-auto flex items-center justify-center">
-                <AlertCircle className="w-5 h-5" />
-              </div>
-              <div>
-                <h5 className="font-heading font-bold text-base text-[#2D1E16]">Сбросить все тексты?</h5>
-                <p className="text-xs text-[#7A6456] mt-1">Все поля вернутся к начальным значениям по умолчанию.</p>
-              </div>
-              <div className="flex gap-2.5 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmResetOpen(false)}
-                  className="flex-1 py-2 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirmReset}
-                  className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-semibold transition-colors cursor-pointer"
-                >
-                  Да, сбросить
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
       </div>
     </div>
   );
