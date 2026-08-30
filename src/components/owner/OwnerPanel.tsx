@@ -44,6 +44,25 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ isOpen, onClose }) => {
   const [copiedHash, setCopiedHash] = useState<boolean>(false);
   const [copiedPassword, setCopiedPassword] = useState<boolean>(false);
 
+  // Lock background body scroll while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      const originalPaddingRight = document.body.style.paddingRight;
+      const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+      document.body.style.overflow = 'hidden';
+      if (scrollBarWidth > 0) {
+        document.body.style.paddingRight = `${scrollBarWidth}px`;
+      }
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.paddingRight = originalPaddingRight;
+      };
+    }
+  }, [isOpen]);
+
   useEffect(() => {
     if (isOpen && isAuthenticated) {
       loadStatus();
@@ -214,7 +233,7 @@ export const OwnerPanel: React.FC<OwnerPanelProps> = ({ isOpen, onClose }) => {
           </div>
         ) : (
           /* Dashboard */
-          <div className="p-5 sm:p-6 overflow-y-auto space-y-5">
+          <div className="p-5 sm:p-6 overflow-y-auto overscroll-contain space-y-5">
             
             {/* System Status Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">

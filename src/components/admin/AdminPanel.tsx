@@ -63,6 +63,25 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [draftSavedMessage, setDraftSavedMessage] = useState<boolean>(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
 
+  // Lock background body scroll while modal is open
+  useEffect(() => {
+    if (isOpen) {
+      const originalOverflow = document.body.style.overflow;
+      const originalPaddingRight = document.body.style.paddingRight;
+      const scrollBarWidth = window.innerWidth - document.documentElement.clientWidth;
+
+      document.body.style.overflow = 'hidden';
+      if (scrollBarWidth > 0) {
+        document.body.style.paddingRight = `${scrollBarWidth}px`;
+      }
+
+      return () => {
+        document.body.style.overflow = originalOverflow;
+        document.body.style.paddingRight = originalPaddingRight;
+      };
+    }
+  }, [isOpen]);
+
   // Check server session on open
   useEffect(() => {
     if (isOpen) {
@@ -235,7 +254,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
             
             {/* Sidebar Navigation */}
-            <div className="w-full md:w-60 bg-[#F3ECE2] border-b md:border-b-0 md:border-r border-[#E5DACD] p-3 flex md:flex-col justify-between shrink-0 overflow-y-auto">
+            <div className="w-full md:w-60 bg-[#F3ECE2] border-b md:border-b-0 md:border-r border-[#E5DACD] p-3 flex md:flex-col justify-between shrink-0 overflow-y-auto overscroll-contain">
               <div className="space-y-4 w-full">
                 
                 {/* Section Group: CONTENT */}
@@ -389,7 +408,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
 
             {/* Main Editor Canvas */}
-            <div className="flex-1 p-4 sm:p-6 overflow-y-auto bg-[#FAF7F2] space-y-5">
+            <div className="flex-1 p-4 sm:p-6 overflow-y-auto overscroll-contain bg-[#FAF7F2] space-y-5">
               
               {/* Status Alert Banners */}
               {draftSavedMessage && (
