@@ -209,18 +209,19 @@ apiRouter.post('/admin/publish', requireAdminAuth, async (req: Request, res: Res
 
 apiRouter.post('/admin/upload', requireAdminAuth, async (req: Request, res: Response) => {
   try {
-    const { filename, base64Data } = req.body || {};
+    const rawData = req.body?.fileData || req.body?.base64Data;
+    const rawName = req.body?.fileName || req.body?.filename;
 
-    if (!filename || !base64Data) {
+    if (!rawData || !rawName) {
       res.status(400).json({ error: 'Bad Request', message: 'Файл или имя файла не переданы' });
       return;
     }
 
     // Clean base64 string
-    const pureBase64 = base64Data.replace(/^data:image\/[a-z0-9.+]+;base64,/, '');
+    const pureBase64 = String(rawData).replace(/^data:image\/[a-z0-9.+]+;base64,/, '');
     const buffer = Buffer.from(pureBase64, 'base64');
 
-    const uploadResult = await commitImageToGitHubServer(buffer, filename);
+    const uploadResult = await commitImageToGitHubServer(buffer, String(rawName));
 
     res.json({
       success: true,
