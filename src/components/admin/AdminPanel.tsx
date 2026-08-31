@@ -25,31 +25,29 @@ import {
   ExternalLink,
   CheckCircle2,
   RefreshCw,
-  Shield,
-  KeyRound,
-  ShieldCheck
+  ShieldCheck,
+  Server,
+  UserCheck,
+  Utensils
 } from 'lucide-react';
 import { SiteContent } from '../../types';
 import { 
-  getStoredGitHubConfig, 
-  saveGitHubConfig, 
-  commitContentToGitHub, 
-  testGitHubConnection, 
-  GitHubConfig 
-} from '../../utils/githubSync';
+  saveContentViaNetlifyFunction, 
+  fetchServerlessInfo, 
+  ServerlessSiteInfo 
+} from '../../utils/netlifySync';
 import { 
-  verifyAdminPassword, 
-  changeAdminPassword, 
-  resetAdminPasswordToDefault, 
-  hasCustomPassword,
-  checkLockout,
-  recordFailedAttempt,
-  resetLockout,
-  setSessionWithExpiry,
-  isSessionValid,
-  clearAdminSession
-} from '../../utils/security';
+  initNetlifyIdentity, 
+  getCurrentIdentityUser, 
+  isIdentityLoggedIn, 
+  openIdentityLogin, 
+  openIdentitySignup, 
+  logoutIdentity, 
+  onIdentityStateChange 
+} from '../../utils/netlifyIdentity';
+import { NetlifyIdentityUser } from '../../vite-env';
 import { ImageUploadField } from './ImageUploadField';
+import { FullMenuAdminTab } from './FullMenuAdminTab';
 
 interface AdminPanelProps {
   isOpen: boolean;
@@ -60,9 +58,6 @@ interface AdminPanelProps {
   onExport: () => void;
 }
 
-export const DEFAULT_ADMIN_PASSWORD = "kofeshtab2025";
-const AUTH_STORAGE_KEY = "kofeshtab_admin_authenticated";
-
 export const AdminPanel: React.FC<AdminPanelProps> = ({
   isOpen,
   onClose,
@@ -71,191 +66,103 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   onReset,
   onExport,
 }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [passwordInput, setPasswordInput] = useState<string>("");
-  const [passwordError, setPasswordError] = useState<string>("");
-  const [showPassword, setShowPassword] = useState<boolean>(false);
+  const [currentUser, setCurrentUser] = useState<NetlifyIdentityUser | null>(getCurrentIdentityUser());
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(isIdentityLoggedIn());
   const [activeTab, setActiveTab] = useState<string>("header");
   const [formData, setFormData] = useState<SiteContent>(content);
   const [saveSuccess, setSaveSuccess] = useState<boolean>(false);
   const [confirmResetOpen, setConfirmResetOpen] = useState<boolean>(false);
 
-  // Security & Password change state
-  const [lockout, setLockout] = useState(checkLockout());
-  const [oldPassword, setOldPassword] = useState<string>("");
-  const [newPassword, setNewPassword] = useState<string>("");
-  const [confirmNewPassword, setConfirmNewPassword] = useState<string>("");
-  const [pwdChangeStatus, setPwdChangeStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
-  const [isCustomPwdActive, setIsCustomPwdActive] = useState<boolean>(hasCustomPassword());
-  const [showNewPwd, setShowNewPwd] = useState<boolean>(false);
+  // Serverless / Netlify Function Sync State
+  const [isPublishing, setIsPublishing] = useState<boolean>(false);
+  const [serverlessInfo, setServerlessInfo] = useState<ServerlessSiteInfo | null>(null);
+  const [publishStatus, setPublishStatus] = useState<{ 
+    type: 'success' | 'error'; 
+    message: string; 
+    commitUrl?: string;
+    sha?: string;
+    repo?: string;
+    branch?: string;
+  } | null>(null);
 
-  // GitHub Sync State
-  const [ghConfig, setGhConfig] = useState<GitHubConfig>(getStoredGitHubConfig());
-  const [showGhToken, setShowGhToken] = useState<boolean>(false);
-  const [ghLoading, setGhLoading] = useState<boolean>(false);
-  const [ghStatus, setGhStatus] = useState<{ type: 'idle' | 'success' | 'error'; message: string; url?: string } | null>(null);
+  // Initialize Netlify Identity & listen to auth state changes
+  useEffect(() => {
+    initNetlifyIdentity((user) => {
+      setCurrentUser(user);
+      setIsAuthenticated(Boolean(user && user.email));
+    });
 
+    const unsubscribe = onIdentityStateChange((user) => {
+      setCurrentUser(user);
+      setIsAuthenticated(Boolean(user && user.email));
+    });
+
+    return () => {
+      unsubscribe();
+    };
+  }, []);
+
+  // Fetch serverless info when modal opens or tab changes to serverless
   useEffect(() => {
     if (isOpen) {
       setFormData(content);
-      setGhConfig(getStoredGitHubConfig());
-      setIsCustomPwdActive(hasCustomPassword());
-      setLockout(checkLockout());
-
-      if (isSessionValid()) {
-        setIsAuthenticated(true);
-      } else {
-        setIsAuthenticated(false);
-      }
+      fetchServerlessInfo().then((info) => {
+        if (info) setServerlessInfo(info);
+      });
     }
   }, [isOpen, content]);
 
-  // Lockout countdown timer
-  useEffect(() => {
-    if (!lockout.isLocked) return;
-    const interval = setInterval(() => {
-      const current = checkLockout();
-      setLockout(current);
-      if (!current.isLocked) {
-        clearInterval(interval);
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [lockout.isLocked]);
-
-  const handleUpdateGhConfig = (newCfg: Partial<GitHubConfig>) => {
-    const updated = { ...ghConfig, ...newCfg };
-    setGhConfig(updated);
-    saveGitHubConfig(updated);
+  const handleLoginClick = () => {
+    openIdentityLogin();
   };
 
-  const handleTestGitHub = async () => {
-    setGhLoading(true);
-    setGhStatus(null);
-    try {
-      const res = await testGitHubConnection(ghConfig);
-      setGhStatus({ type: 'success', message: res.message });
-    } catch (err: unknown) {
-      setGhStatus({ type: 'error', message: (err as Error).message });
-    } finally {
-      setGhLoading(false);
-    }
+  const handleSignupClick = () => {
+    openIdentitySignup();
   };
 
+  const handleLogoutClick = async () => {
+    await logoutIdentity();
+    setCurrentUser(null);
+    setIsAuthenticated(false);
+  };
+
+  /**
+   * Main Save & Publish action:
+   * Sends formData to Netlify Serverless Function (/api/save-content or /.netlify/functions/save-content)
+   * The function authenticates with Netlify Identity and commits changes to GitHub repo using server-side env vars.
+   */
   const handlePublishToGitHub = async () => {
-    // Validate GitHub credentials
-    if (!ghConfig.token || !ghConfig.owner || !ghConfig.repo) {
-      setActiveTab("github");
-      setGhStatus({
-        type: 'error',
-        message: 'Для сохранения на GitHub необходимо указать Owner, Repo и Token во вкладке «GitHub»',
-      });
-      return;
-    }
-
-    setGhLoading(true);
-    setGhStatus(null);
+    setIsPublishing(true);
+    setPublishStatus(null);
 
     try {
-      const res = await commitContentToGitHub(formData, ghConfig);
+      const res = await saveContentViaNetlifyFunction(
+        formData,
+        `Обновление контента сайта [автор: ${currentUser?.email || 'admin'}]`
+      );
+
       onSave(formData);
-      setGhStatus({
+      setPublishStatus({
         type: 'success',
         message: res.message,
-        url: res.commitUrl,
+        commitUrl: res.commitUrl,
+        sha: res.sha,
+        repo: res.repo,
+        branch: res.branch,
       });
       setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 3500);
+      setTimeout(() => setSaveSuccess(false), 4000);
     } catch (err: unknown) {
-      setGhStatus({
+      console.error('Publish via Netlify function failed:', err);
+      // Fallback: save to local memory/state so user progress is never lost
+      onSave(formData);
+      setPublishStatus({
         type: 'error',
-        message: (err as Error).message,
+        message: (err as Error).message || 'Ошибка сохранения через Netlify Function',
       });
     } finally {
-      setGhLoading(false);
+      setIsPublishing(false);
     }
-  };
-
-  const handleLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const currentLock = checkLockout();
-    if (currentLock.isLocked) {
-      setPasswordError(`Вход временно заблокирован. Подождите ${currentLock.remainingSeconds} сек.`);
-      return;
-    }
-
-    try {
-      const isValid = await verifyAdminPassword(passwordInput);
-      if (isValid) {
-        setIsAuthenticated(true);
-        setSessionWithExpiry(120); // 2 hours session
-        resetLockout();
-        setPasswordError("");
-        setPasswordInput("");
-      } else {
-        const afterFail = recordFailedAttempt();
-        setLockout(afterFail);
-        if (afterFail.isLocked) {
-          setPasswordError(`Слишком много неверных попыток. Вход заблокирован на 2 минуты.`);
-        } else {
-          setPasswordError(`Неверный пароль. Осталось попыток: ${afterFail.attemptsLeft}`);
-        }
-      }
-    } catch (err) {
-      setPasswordError("Ошибка при проверке пароля: " + (err as Error).message);
-    }
-  };
-
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    clearAdminSession();
-    setPasswordInput("");
-  };
-
-  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setPwdChangeStatus(null);
-
-    if (newPassword.length < 6) {
-      setPwdChangeStatus({ type: 'error', message: 'Новый пароль должен содержать не менее 6 символов.' });
-      return;
-    }
-
-    if (newPassword !== confirmNewPassword) {
-      setPwdChangeStatus({ type: 'error', message: 'Новые пароли не совпадают.' });
-      return;
-    }
-
-    const isOldValid = await verifyAdminPassword(oldPassword);
-    if (!isOldValid) {
-      setPwdChangeStatus({ type: 'error', message: 'Текущий пароль введен неверно.' });
-      return;
-    }
-
-    try {
-      await changeAdminPassword(newPassword);
-      setIsCustomPwdActive(true);
-      setOldPassword("");
-      setNewPassword("");
-      setConfirmNewPassword("");
-      setPwdChangeStatus({ type: 'success', message: 'Пароль администратора успешно изменен и защищен SHA-256 хешированием!' });
-    } catch (err) {
-      setPwdChangeStatus({ type: 'error', message: (err as Error).message });
-    }
-  };
-
-  const handleResetPasswordDefault = () => {
-    if (confirm("Вернуть пароль по умолчанию (kofeshtab2025)?")) {
-      resetAdminPasswordToDefault();
-      setIsCustomPwdActive(false);
-      setPwdChangeStatus({ type: 'success', message: 'Пароль сброшен к стандартному (kofeshtab2025).' });
-    }
-  };
-
-  const handleSaveChanges = () => {
-    onSave(formData);
-    setSaveSuccess(true);
-    setTimeout(() => setSaveSuccess(false), 2500);
   };
 
   const handleConfirmReset = () => {
@@ -292,12 +199,12 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     { id: "header", label: "Шапка и соцсети", icon: LayoutGrid },
     { id: "hero", label: "Главный экран", icon: Sparkles },
     { id: "about", label: "О штабе", icon: FileText },
-    { id: "menu", label: "Меню и напитки", icon: Coffee },
+    { id: "menu", label: "Меню (блок)", icon: Coffee },
+    { id: "fullMenu", label: "Полное меню (2-я стр.)", icon: Utensils },
     { id: "eventsAndCraft", label: "Жизнь штаба", icon: Calendar },
     { id: "hoursAndTourists", label: "График и гости", icon: Clock },
     { id: "footer", label: "Подвал и контакты", icon: MapPin },
-    { id: "security", label: "Безопасность и пароль", icon: Shield },
-    { id: "github", label: "Синхронизация с GitHub", icon: GitBranch },
+    { id: "serverless", label: "Netlify & GitHub", icon: Server },
   ];
 
   return (
@@ -312,22 +219,35 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
             <div className="flex items-baseline gap-1.5">
               <span className="font-heading font-bold text-sm sm:text-base tracking-tight text-[#2D1E16]">Кофештаб</span>
-              <span className="text-[11px] sm:text-xs text-[#995938] font-medium">Админка</span>
+              <span className="text-[11px] sm:text-xs text-[#995938] font-medium">Панель управления</span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 sm:gap-2">
-            {isAuthenticated && (
+          <div className="flex items-center gap-2">
+            {isAuthenticated && currentUser && (
+              <div className="hidden sm:flex items-center gap-2 px-2.5 py-1 bg-white/80 rounded-xl border border-[#E5DACD] text-xs">
+                <UserCheck className="w-3.5 h-3.5 text-emerald-600" />
+                <span className="text-[#553E31] font-medium truncate max-w-[180px]">
+                  {currentUser.email}
+                </span>
+                <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded-full font-semibold">
+                  Admin
+                </span>
+              </div>
+            )}
+
+            {isAuthenticated ? (
               <button
                 type="button"
-                onClick={handleLogout}
+                onClick={handleLogoutClick}
                 className="px-2.5 sm:px-3 py-1.5 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-xs font-medium text-[#664D3E] transition-colors flex items-center gap-1 cursor-pointer"
-                title="Выйти"
+                title="Выйти из учетной записи"
               >
                 <Unlock className="w-3.5 h-3.5 text-[#C97D5D]" />
                 <span className="hidden sm:inline">Выйти</span>
               </button>
-            )}
+            ) : null}
+
             <button
               type="button"
               onClick={onClose}
@@ -339,53 +259,57 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </div>
 
-        {/* Login Screen */}
+        {/* Login Screen with Netlify Identity */}
         {!isAuthenticated ? (
-          <div className="p-6 sm:p-12 flex flex-col items-center justify-center text-center max-w-sm mx-auto my-auto w-full">
-            <div className="w-12 h-12 rounded-2xl bg-[#EDE2D5] border border-[#DFCFC0] flex items-center justify-center text-[#C97D5D] mb-3 shadow-xs">
-              <Lock className="w-6 h-6" />
+          <div className="p-6 sm:p-12 flex flex-col items-center justify-center text-center max-w-md mx-auto my-auto w-full space-y-5">
+            <div className="w-14 h-14 rounded-2xl bg-[#EDE2D5] border border-[#DFCFC0] flex items-center justify-center text-[#C97D5D] shadow-xs">
+              <ShieldCheck className="w-7 h-7 text-[#C97D5D]" />
             </div>
 
-            <h3 className="font-heading font-bold text-lg sm:text-xl text-[#2D1E16] mb-4">Вход в панель управления</h3>
+            <div className="space-y-1.5">
+              <h3 className="font-heading font-bold text-xl text-[#2D1E16]">Вход в панель управления</h3>
+              <p className="text-xs text-[#7A6456] max-w-sm">
+                Авторизация осуществляется через Netlify Identity с защищенными JWT-токенами и серверным доступом к репозиторию.
+              </p>
+            </div>
 
-            <form onSubmit={handleLogin} className="w-full space-y-3">
-              <div className="relative">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Пароль"
-                  className="w-full px-4 py-2.5 rounded-xl bg-white border border-[#D5C6B7] focus:border-[#C97D5D] focus:ring-1 focus:ring-[#C97D5D] text-sm outline-none transition-all pr-11 text-[#2D1E16]"
-                  autoFocus
-                />
+            <div className="w-full space-y-3 pt-2">
+              <button
+                type="button"
+                onClick={handleLoginClick}
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-sm transition-all shadow-md active:scale-98 cursor-pointer flex items-center justify-center gap-2"
+              >
+                <Lock className="w-4 h-4" />
+                <span>Войти через Netlify Identity</span>
+              </button>
+
+              <div className="flex items-center justify-center gap-4 text-xs text-[#7A6456] pt-2">
+                <span>Нет учетной записи?</span>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-3 text-[#9E8A7D] hover:text-[#2D1E16] cursor-pointer"
+                  onClick={handleSignupClick}
+                  className="text-[#C97D5D] hover:underline font-semibold cursor-pointer"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  Зарегистрироваться
                 </button>
               </div>
+            </div>
 
-              {passwordError && (
-                <div className="text-xs text-red-600 font-medium text-left px-1">
-                  {passwordError}
-                </div>
-              )}
-
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs tracking-wide transition-all shadow-xs active:scale-98 cursor-pointer"
-              >
-                Войти
-              </button>
-            </form>
+            <div className="p-3.5 bg-white/70 rounded-xl border border-[#E5DACD] text-left text-[11px] text-[#7A6456] space-y-1.5 w-full">
+              <div className="font-semibold text-[#2D1E16] flex items-center gap-1.5">
+                <Server className="w-3.5 h-3.5 text-[#C97D5D]" />
+                <span>Безопасная Serverless-архитектура</span>
+              </div>
+              <p className="leading-relaxed">
+                Пароли и ключи GitHub больше не хранятся в коде браузера. Все коммиты выполняет серверная функция Netlify Function через токен из переменных окружения.
+              </p>
+            </div>
           </div>
         ) : (
           /* Authenticated Workspace */
           <div className="flex-1 flex flex-col md:flex-row overflow-hidden min-h-0">
             
-            {/* Responsive Tabs (horizontal scroll on mobile, sidebar on md+) */}
+            {/* Responsive Tabs */}
             <div className="w-full md:w-56 bg-[#F3ECE2] border-b md:border-b-0 md:border-r border-[#E5DACD] p-2 md:p-3 flex md:flex-col gap-1 md:gap-1.5 overflow-x-auto shrink-0">
               {tabs.map((tab) => {
                 const Icon = tab.icon;
@@ -445,52 +369,39 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                    <div className="bg-white p-3 rounded-2xl border border-[#E5DACD]">
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Кнопка соцсетей</label>
-                      <input
-                        type="text"
-                        value={formData.header.socialsButtonText}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          header: { ...formData.header, socialsButtonText: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                    <div className="bg-white p-3 rounded-2xl border border-[#E5DACD]">
-                      <label className="block text-xs font-semibold text-[#664F40] mb-1">Заголовок окна соцсетей</label>
-                      <input
-                        type="text"
-                        value={formData.header.socialsModalTitle}
-                        onChange={(e) => setFormData({
-                          ...formData,
-                          header: { ...formData.header, socialsModalTitle: e.target.value }
-                        })}
-                        className="w-full px-3 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                      />
-                    </div>
-                  </div>
-
                   {/* Nav items */}
                   <div className="bg-white p-3.5 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Пункты меню в шапке</label>
-                    <div className="space-y-2">
+                    <label className="block text-xs font-bold text-[#2D1E16]">Пункты навигации</label>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
                       {formData.header.navItems.map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2">
-                          <span className="text-[11px] text-[#8E796D] w-16 shrink-0 font-mono">#{item.id}</span>
+                        <div key={idx} className="p-2.5 bg-[#FAF7F2] rounded-xl border border-[#E5DACD] space-y-1.5">
                           <input
                             type="text"
-                            value={item.label}
+                            placeholder="Название"
+                            value={item.title}
                             onChange={(e) => {
-                              const newNav = [...formData.header.navItems];
-                              newNav[idx].label = e.target.value;
+                              const newItems = [...formData.header.navItems];
+                              newItems[idx].title = e.target.value;
                               setFormData({
                                 ...formData,
-                                header: { ...formData.header, navItems: newNav }
+                                header: { ...formData.header, navItems: newItems }
                               });
                             }}
-                            className="flex-1 px-3 py-1.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
+                          />
+                          <input
+                            type="text"
+                            placeholder="Якорь (#about)"
+                            value={item.href}
+                            onChange={(e) => {
+                              const newItems = [...formData.header.navItems];
+                              newItems[idx].href = e.target.value;
+                              setFormData({
+                                ...formData,
+                                header: { ...formData.header, navItems: newItems }
+                              });
+                            }}
+                            className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
                           />
                         </div>
                       ))}
@@ -623,7 +534,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         ...formData,
                         hero: { ...formData.hero, bgImage: newUrl }
                       })}
-                      ghConfig={ghConfig}
                       placeholder="https://... или /images/hero.jpg"
                     />
                   </div>
@@ -711,7 +621,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                         ...formData,
                         about: { ...formData.about, image: newUrl }
                       })}
-                      ghConfig={ghConfig}
                       placeholder="https://... или /images/house.jpg"
                     />
                   </div>
@@ -745,74 +654,31 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                             rows={3}
                             value={p}
                             onChange={(e) => {
-                              const newParas = [...formData.about.paragraphs];
-                              newParas[idx] = e.target.value;
+                              const newParagraphs = [...formData.about.paragraphs];
+                              newParagraphs[idx] = e.target.value;
                               setFormData({
                                 ...formData,
-                                about: { ...formData.about, paragraphs: newParas }
+                                about: { ...formData.about, paragraphs: newParagraphs }
                               });
                             }}
-                            className="flex-1 p-2.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] leading-relaxed"
+                            className="w-full p-2.5 rounded-xl bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] resize-y leading-relaxed"
                           />
                           {formData.about.paragraphs.length > 1 && (
                             <button
                               type="button"
                               onClick={() => {
-                                const newParas = formData.about.paragraphs.filter((_, i) => i !== idx);
+                                const newParagraphs = formData.about.paragraphs.filter((_, i) => i !== idx);
                                 setFormData({
                                   ...formData,
-                                  about: { ...formData.about, paragraphs: newParas }
+                                  about: { ...formData.about, paragraphs: newParagraphs }
                                 });
                               }}
-                              className="p-2 rounded-xl text-red-500 hover:bg-red-50 transition-colors cursor-pointer shrink-0"
-                              title="Удалить"
+                              className="p-2 text-red-500 hover:bg-red-50 rounded-lg cursor-pointer"
+                              title="Удалить абзац"
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           )}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Features */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-2xl border border-[#E5DACD] space-y-2.5">
-                    <label className="block text-xs font-bold text-[#2D1E16]">Карточки особенностей</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
-                      {formData.about.features.map((feat, idx) => (
-                        <div key={feat.id} className="p-3 rounded-xl bg-[#FAF7F2] border border-[#E5DACD] space-y-2">
-                          <div>
-                            <input
-                              type="text"
-                              placeholder="Заголовок"
-                              value={feat.title}
-                              onChange={(e) => {
-                                const newFeats = [...formData.about.features];
-                                newFeats[idx].title = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  about: { ...formData.about, features: newFeats }
-                                });
-                              }}
-                              className="w-full px-2.5 py-1.5 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-semibold"
-                            />
-                          </div>
-                          <div>
-                            <textarea
-                              rows={2}
-                              placeholder="Описание"
-                              value={feat.description}
-                              onChange={(e) => {
-                                const newFeats = [...formData.about.features];
-                                newFeats[idx].description = e.target.value;
-                                setFormData({
-                                  ...formData,
-                                  about: { ...formData.about, features: newFeats }
-                                });
-                              }}
-                              className="w-full p-2 rounded-lg bg-white border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                            />
-                          </div>
                         </div>
                       ))}
                     </div>
@@ -932,7 +798,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                                 menu: { ...formData.menu, highlightCards: newCards }
                               });
                             }}
-                            ghConfig={ghConfig}
                             placeholder="https://... или /images/dessert.jpg"
                           />
                         </div>
@@ -1045,6 +910,17 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     </div>
                   </div>
                 </div>
+              )}
+
+              {/* TAB: FULL MENU (2nd Page) */}
+              {activeTab === "fullMenu" && formData.fullMenu && (
+                <FullMenuAdminTab
+                  fullMenu={formData.fullMenu}
+                  onChange={(newFullMenu) => setFormData({
+                    ...formData,
+                    fullMenu: newFullMenu
+                  })}
+                />
               )}
 
               {/* TAB: EVENTS & CRAFT */}
@@ -1166,7 +1042,6 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                               eventsAndCraft: { ...formData.eventsAndCraft, cards: newCards }
                             });
                           }}
-                          ghConfig={ghConfig}
                           placeholder="https://... или /images/event.jpg"
                         />
                       </div>
@@ -1697,288 +1572,117 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 </div>
               )}
 
-              {/* TAB: SECURITY & PASSWORD */}
-              {activeTab === "security" && (
-                <div className="space-y-4">
-                  <div className="border-b border-[#E5DACD] pb-2">
-                    <h4 className="font-heading font-bold text-base text-[#2D1E16] flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-[#C97D5D]" />
-                      <span>Безопасность и пароль</span>
-                    </h4>
-                  </div>
-
-                  {/* Security Highlights */}
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
-                    <div className="p-3 bg-white rounded-xl border border-[#E5DACD] space-y-1">
-                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
-                        <KeyRound className="w-3.5 h-3.5" />
-                        <span className="text-xs font-bold text-[#2D1E16]">Пароль</span>
-                      </div>
-                      <p className="text-xs font-semibold">
-                        {isCustomPwdActive ? (
-                          <span className="text-emerald-700">✓ Личный пароль (SHA-256)</span>
-                        ) : (
-                          <span className="text-amber-700">Стандартный</span>
-                        )}
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-xl border border-[#E5DACD] space-y-1">
-                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
-                        <Shield className="w-3.5 h-3.5" />
-                        <span className="text-xs font-bold text-[#2D1E16]">Anti-Brute Force</span>
-                      </div>
-                      <p className="text-xs font-semibold text-emerald-700">
-                        Активна (5 попыток)
-                      </p>
-                    </div>
-
-                    <div className="p-3 bg-white rounded-xl border border-[#E5DACD] space-y-1">
-                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
-                        <Clock className="w-3.5 h-3.5" />
-                        <span className="text-xs font-bold text-[#2D1E16]">Сессия</span>
-                      </div>
-                      <p className="text-xs font-semibold text-emerald-700">
-                        2 часа
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Password Change Form */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#E5DACD] space-y-3">
-                    <h5 className="font-heading font-bold text-xs text-[#2D1E16] flex items-center gap-1.5">
-                      <KeyRound className="w-3.5 h-3.5 text-[#C97D5D]" />
-                      <span>Изменить пароль</span>
-                    </h5>
-
-                    <form onSubmit={handleChangePasswordSubmit} className="space-y-3 max-w-md">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Текущий пароль
-                        </label>
-                        <input
-                          type={showNewPwd ? "text" : "password"}
-                          value={oldPassword}
-                          onChange={(e) => setOldPassword(e.target.value)}
-                          placeholder="Старый пароль"
-                          required
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Новый пароль (от 6 символов)
-                        </label>
-                        <input
-                          type={showNewPwd ? "text" : "password"}
-                          value={newPassword}
-                          onChange={(e) => setNewPassword(e.target.value)}
-                          placeholder="Новый пароль"
-                          required
-                          minLength={6}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Подтверждение нового пароля
-                        </label>
-                        <input
-                          type={showNewPwd ? "text" : "password"}
-                          value={confirmNewPassword}
-                          onChange={(e) => setConfirmNewPassword(e.target.value)}
-                          placeholder="Повторите новый пароль"
-                          required
-                          minLength={6}
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setShowNewPwd(!showNewPwd)}
-                          className="text-[11px] text-[#8E796D] hover:text-[#2D1E16] flex items-center gap-1.5 cursor-pointer py-0.5"
-                        >
-                          {showNewPwd ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                          <span>{showNewPwd ? "Скрыть пароли" : "Показать пароли"}</span>
-                        </button>
-                      </div>
-
-                      {pwdChangeStatus && (
-                        <div
-                          className={`p-2.5 rounded-lg text-xs flex items-start gap-2 animate-in fade-in duration-150 ${
-                            pwdChangeStatus.type === 'success'
-                              ? 'bg-emerald-50 border border-emerald-200 text-emerald-800'
-                              : 'bg-red-50 border border-red-200 text-red-700'
-                          }`}
-                        >
-                          {pwdChangeStatus.type === 'success' ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-                          ) : (
-                            <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
-                          )}
-                          <span>{pwdChangeStatus.message}</span>
-                        </div>
-                      )}
-
-                      <div className="flex flex-wrap items-center gap-2 pt-1">
-                        <button
-                          type="submit"
-                          className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                          <span>Сохранить пароль</span>
-                        </button>
-
-                        {isCustomPwdActive && (
-                          <button
-                            type="button"
-                            onClick={handleResetPasswordDefault}
-                            className="px-3 py-1.5 rounded-lg bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-medium transition-colors cursor-pointer"
-                          >
-                            Сбросить к стандартному
-                          </button>
-                        )}
-                      </div>
-                    </form>
-                  </div>
-
-                  {/* Public URL and access shortcut */}
-                  <div className="bg-[#FAF7F2] p-3 rounded-xl border border-[#E5DACD] text-xs text-[#664D3E] flex flex-wrap items-center justify-between gap-2">
-                    <span>Быстрый вход: <strong>Ctrl + Shift + A</strong> (или <strong>/admin</strong> в URL)</span>
-                  </div>
-                </div>
-              )}
-
-              {/* TAB: GITHUB SYNC */}
-              {activeTab === "github" && (
+              {/* TAB: NETLIFY FUNCTIONS & SERVERLESS GITHUB SYNC */}
+              {activeTab === "serverless" && (
                 <div className="space-y-4">
                   <div className="border-b border-[#E5DACD] pb-2">
                     <div className="flex items-center gap-2">
-                      <GitBranch className="w-4 h-4 text-[#C97D5D]" />
-                      <h4 className="font-heading font-bold text-base text-[#2D1E16]">Синхронизация с GitHub</h4>
+                      <Server className="w-4 h-4 text-[#C97D5D]" />
+                      <h4 className="font-heading font-bold text-base text-[#2D1E16]">Netlify Functions & Серверная архитектура</h4>
                     </div>
                   </div>
 
-                  {/* Repository Settings */}
-                  <div className="bg-white p-3.5 sm:p-4 rounded-xl border border-[#E5DACD] space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Владелец / Логин (Owner)
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.owner}
-                          onChange={(e) => handleUpdateGhConfig({ owner: e.target.value })}
-                          placeholder="например: tryphonbrooks"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
+                  {/* Architecture Status Cards */}
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div className="p-3.5 bg-white rounded-2xl border border-[#E5DACD] space-y-1">
+                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
+                        <Server className="w-3.5 h-3.5" />
+                        <span className="text-xs font-bold text-[#2D1E16]">Serverless Endpoint</span>
                       </div>
+                      <p className="text-xs font-mono font-semibold text-emerald-700">
+                        /.netlify/functions/save-content
+                      </p>
+                    </div>
 
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Репозиторий (Repo)
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.repo}
-                          onChange={(e) => handleUpdateGhConfig({ repo: e.target.value })}
-                          placeholder="например: kofeshtab"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
+                    <div className="p-3.5 bg-white rounded-2xl border border-[#E5DACD] space-y-1">
+                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        <span className="text-xs font-bold text-[#2D1E16]">Авторизация</span>
                       </div>
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Netlify Identity JWT
+                      </p>
+                    </div>
 
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Ветка (Branch)
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.branch}
-                          onChange={(e) => handleUpdateGhConfig({ branch: e.target.value })}
-                          placeholder="main"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
+                    <div className="p-3.5 bg-white rounded-2xl border border-[#E5DACD] space-y-1">
+                      <div className="flex items-center gap-1.5 text-[#C97D5D]">
+                        <GitBranch className="w-3.5 h-3.5" />
+                        <span className="text-xs font-bold text-[#2D1E16]">GitHub Токен</span>
                       </div>
+                      <p className="text-xs font-semibold text-emerald-700">
+                        Серверный (Netlify Env)
+                      </p>
+                    </div>
+                  </div>
 
-                      <div>
-                        <label className="block text-[11px] text-[#8C7465] mb-1 font-medium">
-                          Путь к файлу контента
-                        </label>
-                        <input
-                          type="text"
-                          value={ghConfig.filePath}
-                          onChange={(e) => handleUpdateGhConfig({ filePath: e.target.value })}
-                          placeholder="public/content.json"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16]"
-                        />
+                  {/* Server Details */}
+                  <div className="bg-white p-4 sm:p-5 rounded-2xl border border-[#E5DACD] space-y-3.5">
+                    <h5 className="font-heading font-bold text-sm text-[#2D1E16] flex items-center gap-2">
+                      <GitCommit className="w-4 h-4 text-[#C97D5D]" />
+                      <span>Параметры репозитория на сервере</span>
+                    </h5>
+
+                    <div className="p-3.5 bg-[#FAF7F2] rounded-xl border border-[#E5DACD] text-xs space-y-2">
+                      <div className="flex justify-between items-center py-1 border-b border-[#EAE0D5]">
+                        <span className="text-[#7A6456]">Репозиторий GitHub:</span>
+                        <span className="font-mono font-bold text-[#2D1E16]">
+                          {serverlessInfo?.repo || 'tryphonbrooks/kofeshtab'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-[#EAE0D5]">
+                        <span className="text-[#7A6456]">Ветка (Branch):</span>
+                        <span className="font-mono font-bold text-[#2D1E16]">
+                          {serverlessInfo?.branch || 'main'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center py-1 border-b border-[#EAE0D5]">
+                        <span className="text-[#7A6456]">Файл контента:</span>
+                        <span className="font-mono font-bold text-[#2D1E16]">public/content.json</span>
+                      </div>
+                      <div className="flex justify-between items-center py-1">
+                        <span className="text-[#7A6456]">Текущий пользователь Netlify:</span>
+                        <span className="font-semibold text-emerald-700">{currentUser?.email || 'Не авторизован'}</span>
                       </div>
                     </div>
 
-                    {/* GitHub Personal Access Token */}
-                    <div>
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-[11px] text-[#8C7465] font-medium">
-                          GitHub Token (PAT)
-                        </label>
-                        <a
-                          href="https://github.com/settings/tokens/new?scopes=repo&description=KofeshtabAdmin"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[11px] text-[#C97D5D] hover:underline flex items-center gap-1 font-medium"
-                        >
-                          <span>Создать токен</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
+                    {/* How to configure Netlify Environment Variables Guide */}
+                    <div className="p-3.5 bg-[#F6EFE7] rounded-xl border border-[#E2D4C6] text-xs space-y-2">
+                      <div className="font-bold text-[#553E31]">
+                        Настройка переменных в панели управления Netlify:
                       </div>
-                      <div className="relative">
-                        <input
-                          type={showGhToken ? "text" : "password"}
-                          value={ghConfig.token}
-                          onChange={(e) => handleUpdateGhConfig({ token: e.target.value })}
-                          placeholder="ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-                          className="w-full px-3 py-1.5 rounded-lg bg-[#FAF7F2] border border-[#D8C9B9] text-xs outline-none focus:border-[#C97D5D] text-[#2D1E16] font-mono pr-9"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowGhToken(!showGhToken)}
-                          className="absolute right-2.5 top-2 text-[#9E8A7D] hover:text-[#2D1E16] cursor-pointer"
-                          title={showGhToken ? "Скрыть токен" : "Показать токен"}
-                        >
-                          {showGhToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
+                      <ol className="list-decimal list-inside space-y-1 text-[#664D3E] leading-relaxed">
+                        <li>Откройте панель <strong>Netlify → Site configuration → Environment variables</strong>.</li>
+                        <li>Добавьте переменную <code>GITHUB_TOKEN</code> (персональный токен GitHub с правами <code>repo</code>).</li>
+                        <li>(Опционально) Задайте <code>GITHUB_REPO</code> (например <code>tryphonbrooks/kofeshtab</code>).</li>
+                        <li>В разделе <strong>Netlify → Identity</strong> включите Identity сервис для регистрации администраторов.</li>
+                      </ol>
                     </div>
 
                     {/* Status Message */}
-                    {ghStatus && (
+                    {publishStatus && (
                       <div 
-                        className={`p-3 rounded-lg text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
-                          ghStatus.type === 'success' 
+                        className={`p-3.5 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in duration-200 ${
+                          publishStatus.type === 'success' 
                             ? 'bg-emerald-50 border border-emerald-200 text-emerald-800' 
                             : 'bg-red-50 border border-red-200 text-red-700'
                         }`}
                       >
-                        {ghStatus.type === 'success' ? (
+                        {publishStatus.type === 'success' ? (
                           <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                         ) : (
                           <AlertCircle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
                         )}
                         <div className="flex-1 space-y-1">
-                          <div className="font-medium">{ghStatus.message}</div>
-                          {ghStatus.url && (
+                          <div className="font-medium">{publishStatus.message}</div>
+                          {publishStatus.commitUrl && (
                             <a 
-                              href={ghStatus.url} 
+                              href={publishStatus.commitUrl} 
                               target="_blank" 
                               rel="noopener noreferrer"
                               className="text-emerald-700 underline font-semibold flex items-center gap-1 hover:text-emerald-900 mt-1"
                             >
-                              <span>Открыть коммит на GitHub</span>
-                              <ExternalLink className="w-3 h-3" />
+                              <span>Посмотреть коммит на GitHub</span>
+                              <ExternalLink className="w-3.5 h-3.5" />
                             </a>
                           )}
                         </div>
@@ -1986,25 +1690,30 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                     )}
 
                     {/* Action buttons inside Tab */}
-                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <div className="flex flex-wrap items-center gap-2.5 pt-2">
                       <button
                         type="button"
-                        onClick={handleTestGitHub}
-                        disabled={ghLoading || !ghConfig.token || !ghConfig.owner || !ghConfig.repo}
-                        className="px-3.5 py-1.5 rounded-lg bg-[#EDE2D5] hover:bg-[#E4D7C9] disabled:opacity-50 disabled:cursor-not-allowed text-[#664D3E] text-xs font-medium transition-all flex items-center gap-1.5 cursor-pointer"
+                        onClick={handlePublishToGitHub}
+                        disabled={isPublishing}
+                        className="px-4 py-2 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-2 cursor-pointer active:scale-95"
                       >
-                        {ghLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GitBranch className="w-3.5 h-3.5 text-[#C97D5D]" />}
-                        <span>Проверить</span>
+                        {isPublishing ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GitCommit className="w-3.5 h-3.5" />}
+                        <span>Опубликовать через Netlify Function</span>
                       </button>
 
                       <button
                         type="button"
-                        onClick={handlePublishToGitHub}
-                        disabled={ghLoading || !ghConfig.token || !ghConfig.owner || !ghConfig.repo}
-                        className="px-4 py-1.5 rounded-lg bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs transition-all shadow-xs flex items-center gap-1.5 cursor-pointer active:scale-95"
+                        onClick={() => {
+                          fetchServerlessInfo().then((info) => {
+                            if (info) {
+                              setServerlessInfo(info);
+                              alert('Статус функции Netlify успешно обновлен.');
+                            }
+                          });
+                        }}
+                        className="px-3.5 py-2 rounded-xl bg-[#EDE2D5] hover:bg-[#E4D7C9] text-[#664D3E] text-xs font-medium transition-colors cursor-pointer"
                       >
-                        {ghLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <GitCommit className="w-3.5 h-3.5" />}
-                        <span>Опубликовать на GitHub</span>
+                        Проверить статус
                       </button>
                     </div>
 
@@ -2016,24 +1725,24 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
 
-        {/* Status Notification banner above footer if there is any GitHub status */}
-        {isAuthenticated && ghStatus?.message && (
+        {/* Status Notification banner above footer if there is any publish status */}
+        {isAuthenticated && publishStatus?.message && (
           <div className={`px-4 sm:px-6 py-2.5 text-xs flex items-center justify-between border-t transition-all shrink-0 ${
-            ghStatus.type === 'success' 
+            publishStatus.type === 'success' 
               ? 'bg-emerald-50 text-emerald-900 border-emerald-200' 
               : 'bg-red-50 text-red-900 border-red-200'
           }`}>
             <div className="flex items-center gap-2">
-              {ghStatus.type === 'success' ? (
+              {publishStatus.type === 'success' ? (
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               ) : (
                 <AlertCircle className="w-4 h-4 text-red-600 shrink-0" />
               )}
-              <span className="font-medium">{ghStatus.message}</span>
+              <span className="font-medium">{publishStatus.message}</span>
             </div>
             <button 
               type="button" 
-              onClick={() => setGhStatus(null)} 
+              onClick={() => setPublishStatus(null)} 
               className="p-1 text-[#8C7465] hover:text-[#2D1E16] cursor-pointer"
             >
               <X className="w-3.5 h-3.5" />
@@ -2041,32 +1750,48 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         )}
 
-        {/* Clean Bottom Action Bar with ONLY GitHub Save */}
+        {/* Clean Bottom Action Bar */}
         {isAuthenticated && (
           <div className="bg-[#F6EFE7] px-4 sm:px-6 py-3 border-t border-[#E5DACD] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
-            {/* Repository Info / Status indicator */}
+            {/* Serverless Status indicator */}
             <div className="flex items-center gap-2">
-              <div 
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium ${
-                  ghConfig.token && ghConfig.owner && ghConfig.repo 
-                    ? 'bg-emerald-100/80 text-emerald-900 border border-emerald-300/70' 
-                    : 'bg-amber-100/80 text-amber-900 border border-amber-300/70'
-                }`}
-              >
-                <GitBranch className="w-3.5 h-3.5 shrink-0" />
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium bg-emerald-100/90 text-emerald-900 border border-emerald-300/70">
+                <Server className="w-3.5 h-3.5 shrink-0 text-emerald-700" />
                 <span className="truncate max-w-[220px] sm:max-w-[320px]">
-                  {ghConfig.token && ghConfig.owner && ghConfig.repo 
-                    ? `${ghConfig.owner}/${ghConfig.repo} (${ghConfig.branch || 'main'})`
-                    : 'GitHub не настроен'}
+                  Netlify Function → GitHub ({serverlessInfo?.branch || 'main'})
                 </span>
               </div>
 
+              {/* Local Export / Import fallback buttons */}
               <button
                 type="button"
-                onClick={() => setActiveTab("github")}
-                className="text-xs text-[#C97D5D] hover:underline font-semibold ml-1 cursor-pointer"
+                onClick={onExport}
+                className="p-2 rounded-xl bg-white hover:bg-[#F2E8DC] border border-[#D8C9B9] text-[#553E31] text-xs font-medium transition-colors cursor-pointer"
+                title="Экспорт JSON файла"
               >
-                {ghConfig.token && ghConfig.owner && ghConfig.repo ? 'Изменить' : 'Настроить'}
+                <Download className="w-3.5 h-3.5" />
+              </button>
+
+              <label
+                className="p-2 rounded-xl bg-white hover:bg-[#F2E8DC] border border-[#D8C9B9] text-[#553E31] text-xs font-medium transition-colors cursor-pointer"
+                title="Импорт JSON файла"
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileImport}
+                  className="hidden"
+                />
+              </label>
+
+              <button
+                type="button"
+                onClick={() => setConfirmResetOpen(true)}
+                className="p-2 rounded-xl bg-white hover:bg-red-50 border border-[#D8C9B9] text-[#8C4E3D] hover:text-red-700 text-xs font-medium transition-colors cursor-pointer"
+                title="Сбросить все изменения"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
               </button>
             </div>
 
@@ -2083,15 +1808,15 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               <button
                 type="button"
                 onClick={handlePublishToGitHub}
-                disabled={ghLoading}
+                disabled={isPublishing}
                 className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold text-xs sm:text-sm transition-all shadow-md flex items-center justify-center gap-2 cursor-pointer active:scale-95"
               >
-                {ghLoading ? (
+                {isPublishing ? (
                   <RefreshCw className="w-4 h-4 animate-spin" />
                 ) : (
                   <GitCommit className="w-4 h-4 text-white" />
                 )}
-                <span>{ghLoading ? "Сохранение на GitHub..." : "Сохранить на GitHub"}</span>
+                <span>{isPublishing ? "Публикация на GitHub..." : "Сохранить и опубликовать"}</span>
               </button>
             </div>
           </div>

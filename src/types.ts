@@ -136,11 +136,45 @@ export interface FooterContent {
   bottomAddress?: string;
 }
 
+export interface MenuItem {
+  id: string;
+  name: string;
+  description: string;
+  price: string;
+  volume?: string;
+  badge?: string;
+  image?: string;
+  isAvailable?: boolean;
+}
+
+export interface MenuCategory {
+  id: string;
+  title: string;
+  subtitle?: string;
+  items: MenuItem[];
+}
+
+export interface FullMenuPorcelainNotice {
+  title: string;
+  description: string;
+  badgeText: string;
+}
+
+export interface FullMenuPageContent {
+  sectionTag: string;
+  title: string;
+  subtitle: string;
+  porcelainNotice: FullMenuPorcelainNotice;
+  specialNotice: string;
+  categories: MenuCategory[];
+}
+
 export interface SiteContent {
   header: HeaderContent;
   hero: HeroContent;
   about: AboutContent;
   menu: MenuContent;
+  fullMenu: FullMenuPageContent;
   eventsAndCraft: EventsAndCraftContent;
   hoursAndTourists: HoursAndTouristsContent;
   footer: FooterContent;

@@ -1,12 +1,13 @@
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, ArrowRight, Utensils } from 'lucide-react';
 import { MenuContent } from '../types';
 
 interface MenuSectionProps {
   content: MenuContent;
+  onOpenFullMenu?: () => void;
 }
 
-export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
+export const MenuSection: React.FC<MenuSectionProps> = ({ content, onOpenFullMenu }) => {
   return (
     <section 
       id="menu" 
@@ -22,9 +23,20 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
           <h2 className="font-heading text-2xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-[#2D1E16] mb-3 sm:mb-4">
             {content.title}
           </h2>
-          <p className="text-base sm:text-lg text-[#5C4638] leading-relaxed">
+          <p className="text-base sm:text-lg text-[#5C4638] leading-relaxed mb-5">
             {content.subtitle}
           </p>
+
+          {onOpenFullMenu && (
+            <button
+              onClick={onOpenFullMenu}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-[#FAF0E6] hover:bg-[#F3E3D3] text-[#B66645] border border-[#E2D0C0] text-xs sm:text-sm font-semibold transition-all shadow-2xs hover:shadow-xs active:scale-98 cursor-pointer"
+            >
+              <Utensils className="w-4 h-4 text-[#C97D5D]" />
+              <span>Смотреть полное меню и цены (25+ позиций)</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
 
         {/* 4 Cards Grid with Smooth Hover Interactions and Pastel Gradients */}
@@ -63,7 +75,7 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
         </div>
 
         {/* Additional Drinks & Porcelain Serving Banner */}
-        <div className="rounded-3xl p-5 sm:p-8 lg:p-10 bg-gradient-to-br from-[#F5ECE2] via-[#EFE5DA] to-[#ECE0D3] border border-[#E5D7C9] card-soft-shadow transition-all duration-300 ease-out hover:shadow-md">
+        <div className="rounded-3xl p-5 sm:p-8 lg:p-10 bg-gradient-to-br from-[#F5ECE2] via-[#EFE5DA] to-[#ECE0D3] border border-[#E5D7C9] card-soft-shadow transition-all duration-300 ease-out hover:shadow-md mb-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 sm:gap-4 pb-5 sm:pb-6 mb-5 sm:mb-6 border-b border-[#DFCFC0]">
             <div>
               <span className="text-xs font-semibold uppercase tracking-widest text-[#C97D5D] block mb-1">
@@ -97,6 +109,31 @@ export const MenuSection: React.FC<MenuSectionProps> = ({ content }) => {
             ))}
           </div>
         </div>
+
+        {/* Full Menu Page CTA Callout */}
+        {onOpenFullMenu && (
+          <div className="p-6 sm:p-8 rounded-3xl bg-[#2D1E16] text-[#FAF7F2] border border-[#3D291F] flex flex-col sm:flex-row items-center justify-between gap-5 shadow-lg">
+            <div className="space-y-1.5 text-center sm:text-left">
+              <span className="text-[11px] uppercase tracking-wider font-semibold text-[#E09D77]">
+                Вся карта напитков и блюд
+              </span>
+              <h3 className="font-heading font-bold text-xl sm:text-2xl text-[#FAF7F2]">
+                Хотите изучить все меню с ценами и составом?
+              </h3>
+              <p className="text-xs sm:text-sm text-[#CFBCAD] max-w-xl">
+                Классический и авторский кофе, травяные чаи в фарфоре, романовский квас, борисоглебские фермерские сыры, домашняя выпечка и сувениры 3D-мастерской.
+              </p>
+            </div>
+
+            <button
+              onClick={onOpenFullMenu}
+              className="px-6 py-3 rounded-full bg-gradient-to-r from-[#C97D5D] to-[#B86846] hover:from-[#B86846] hover:to-[#A75736] text-white text-xs sm:text-sm font-semibold tracking-wide transition-all shadow-sm active:scale-98 cursor-pointer whitespace-nowrap shrink-0 flex items-center gap-2"
+            >
+              <span>Открыть страницу меню</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+        )}
 
       </div>
     </section>

@@ -31,7 +31,12 @@ export function useSiteContent() {
           if (response.ok) {
             const json = await response.json();
             if (isMounted && json) {
-              setContent(json);
+              const merged: SiteContent = {
+                ...DEFAULT_SITE_CONTENT,
+                ...json,
+                fullMenu: json.fullMenu || DEFAULT_SITE_CONTENT.fullMenu
+              };
+              setContent(merged);
               setIsLoading(false);
               return;
             }
@@ -46,7 +51,12 @@ export function useSiteContent() {
           try {
             const parsed = JSON.parse(savedLocal);
             if (parsed && typeof parsed === 'object') {
-              setContent(parsed);
+              const merged: SiteContent = {
+                ...DEFAULT_SITE_CONTENT,
+                ...parsed,
+                fullMenu: parsed.fullMenu || DEFAULT_SITE_CONTENT.fullMenu
+              };
+              setContent(merged);
               setIsLoading(false);
               return;
             }

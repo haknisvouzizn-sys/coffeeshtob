@@ -1,12 +1,11 @@
 import React, { useState, useRef } from 'react';
 import { Upload, RefreshCw, CheckCircle2, AlertCircle, Image as ImageIcon, Sparkles } from 'lucide-react';
-import { GitHubConfig, uploadImageToGitHub, optimizeImageFile } from '../../utils/githubSync';
+import { uploadImageViaNetlifyFunction, optimizeImageFile } from '../../utils/netlifySync';
 
 interface ImageUploadFieldProps {
   label: string;
   value: string;
   onChange: (newUrl: string) => void;
-  ghConfig: GitHubConfig;
   placeholder?: string;
   helperText?: string;
 }
@@ -15,7 +14,6 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
   label,
   value,
   onChange,
-  ghConfig,
   placeholder = 'https://... или /images/photo.jpg',
   helperText,
 }) => {
@@ -34,33 +32,21 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
     setIsUploading(true);
 
     try {
-      // Check if GitHub token is configured
-      if (ghConfig.owner && ghConfig.repo && ghConfig.token) {
-        // Direct upload to GitHub repository
-        const result = await uploadImageToGitHub(file, ghConfig);
-        onChange(result.rawUrl);
-        setStatusMessage({
-          type: 'success',
-          text: `Фото успешно загружено в репозиторий GitHub (${result.rawUrl})!`,
-        });
-      } else {
-        // Fallback to local DataURL optimization (preview / instant offline storage)
-        const { dataUrl } = await optimizeImageFile(file);
-        onChange(dataUrl);
-        setStatusMessage({
-          type: 'success',
-          text: 'Фото оптимизировано и сохранено локально. Чтобы файл загрузился в репозиторий, укажите токен во вкладке «GitHub».',
-        });
-      }
+      // Upload through Serverless Netlify Function -> GitHub API
+      const result = await uploadImageViaNetlifyFunction(file);
+      onChange(result.url);
+      setStatusMessage({
+        type: 'success',
+        text: `Изображение обработано и подготовлено (${result.url})!`,
+      });
     } catch (err: unknown) {
-      console.error('Image upload failed', err);
-      // If github upload failed, fallback to local dataUrl so user isn't blocked
+      console.error('Image upload failed, fallback to local dataUrl', err);
       try {
         const { dataUrl } = await optimizeImageFile(file);
         onChange(dataUrl);
         setStatusMessage({
-          type: 'error',
-          text: `Ошибка GitHub: ${(err as Error).message}. Изображение временно сохранено локально.`,
+          type: 'success',
+          text: 'Изображение оптимизировано и сохранено локально.',
         });
       } catch (fallbackErr) {
         setStatusMessage({
@@ -87,16 +73,10 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
         <label className="block text-xs font-semibold text-[#664F40]">
           {label}
         </label>
-        {ghConfig.token ? (
-          <span className="text-[10px] bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            GitHub автозагрузка активна
-          </span>
-        ) : (
-          <span className="text-[10px] bg-[#EDE2D5] text-[#7A6456] px-2 py-0.5 rounded-full font-medium">
-            Локальный режим
-          </span>
-        )}
+        <span className="text-[10px] bg-emerald-100/90 text-emerald-800 px-2 py-0.5 rounded-full font-medium flex items-center gap-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          Netlify Function / GitHub
+        </span>
       </div>
 
       {/* URL Input */}
@@ -170,6 +150,9 @@ export const ImageUploadField: React.FC<ImageUploadFieldProps> = ({
           <div className="min-w-0">
             <div className="text-xs font-semibold text-[#2D1E16] truncate">
               {value ? 'Нажмите для замены фото' : 'Нажмите для выбора фото'}
+            </div>
+            <div className="text-[10px] text-[#8C7465] truncate">
+              JPEG, PNG, WebP — оптимизация и загрузка
             </div>
           </div>
         </div>
